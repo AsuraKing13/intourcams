@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>INTOURCAMS</title>
+
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react-dom/server": "https://esm.sh/react-dom@^19.1.0/server",
+    "@heroicons/react/": "https://esm.sh/@heroicons/react@^2.2.0/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.51.0",
+    "recharts": "https://esm.sh/recharts@^3.1.0",
+    "@google/genai": "https://esm.sh/@google/genai",
+    "vite": "https://aistudiocdn.com/vite@^7.1.6",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.3",
+    "path": "https://aistudiocdn.com/path@^0.12.7"
+  }
+}
+</script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Add Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Add Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    .text-shadow-md {
+        text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+    }
+    
+    /* Custom scrollbar for webkit browsers (theme-aware) */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    /* Light Mode Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #9CA3AF; /* neutral-400-light */
+      border-radius: 20px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: #6B7280; /* neutral-500-light */
+    }
+    /* Dark Mode Scrollbar */
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #4b5563; /* neutral-600-dark adjusted */
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: #6B7280; /* neutral-500-dark */
+    }
+
+    /* ACCESSIBILITY OVERRIDES */
+    html.font-size-large { font-size: 18px; }
+    html.font-size-extra-large { font-size: 20px; }
+
+    /* High Contrast Mode Styles */
+    html.high-contrast body,
+    html.high-contrast .bg-brand-bg-light, html.high-contrast .dark\\:bg-brand-bg,
+    html.high-contrast .bg-content-bg-light, html.high-contrast .dark\\:bg-content-bg,
+    html.high-contrast .bg-sidebar-bg-light, html.high-contrast .dark\\:bg-sidebar-bg,
+    html.high-contrast .bg-card-bg-light, html.high-contrast .dark\\:bg-card-bg,
+    html.high-contrast .bg-input-bg-light, html.high-contrast .dark\\:bg-input-bg,
+    html.high-contrast .bg-neutral-100-light, html.high-contrast .dark\\:bg-neutral-800-dark,
+    html.high-contrast .bg-neutral-200-light, html.high-contrast .dark\\:bg-neutral-700-dark {
+        background-color: #000 !important;
+        color: #fff !important;
+    }
+
+    html.high-contrast .text-brand-text-light, html.high-contrast .dark\\:text-brand-text,
+    html.high-contrast .text-brand-green-text, html.high-contrast .dark\\:text-brand-dark-green-text,
+    html.high-contrast .text-brand-text-secondary-light, html.high-contrast .dark\\:text-brand-text-secondary {
+        color: #fff !important;
+    }
+
+    html.high-contrast .text-brand-green, html.high-contrast .dark\\:text-brand-dark-green-text,
+    html.high-contrast .text-yellow-400, html.high-contrast .text-indigo-400,
+    html.high-contrast a, html.high-contrast .hover\\:underline:hover {
+        color: #ffff00 !important; /* Yellow for links and highlights */
+    }
+
+    html.high-contrast button, html.high-contrast input, html.high-contrast select, html.high-contrast textarea, html.high-contrast .border,
+    html.high-contrast .border-neutral-300-light, html.high-contrast .dark\\:border-neutral-700-dark,
+    html.high-contrast .border-b, html.high-contrast .border-t,
+    html.high-contrast .border-neutral-200-light, html.high-contrast .dark\\:border-neutral-600-dark {
+        border-color: #fff !important;
+    }
+    
+    html.high-contrast .bg-brand-green, html.high-contrast .dark\\:bg-brand-dark-green,
+    html.high-contrast .peer-checked\\:bg-brand-green {
+        background-color: #000 !important;
+        color: #ffff00 !important;
+        border: 2px solid #ffff00 !important;
+    }
+    html.high-contrast .bg-brand-green:hover, html.high-contrast .dark\\:bg-brand-dark-green:hover {
+        background-color: #ffff00 !important;
+        color: #000 !important;
+    }
+
+    /* Enhanced Keyboard Navigation Focus */
+    *:focus-visible {
+        outline: 3px solid #004925 !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 5px rgba(0, 73, 37, 0.4) !important;
+        border-radius: 4px;
+    }
+    .dark *:focus-visible {
+        outline-color: #fcc500 !important;
+         box-shadow: 0 0 0 5px rgba(252, 197, 0, 0.4) !important;
+    }
+
+    html.high-contrast *:focus-visible {
+        outline-color: #ffff00 !important; /* Yellow for high contrast */
+        box-shadow: 0 0 0 5px rgba(255, 255, 0, 0.5) !important;
+    }
+
+    html.high-contrast .shadow-lg, html.high-contrast .shadow-xl, html.high-contrast .shadow-md {
+        box-shadow: none !important;
+    }
+    html.high-contrast [class*="text-red-"] {
+      color: #ff8a8a !important; /* Lighter red for visibility on black */
+    }
+    html.high-contrast [class*="bg-red-"] {
+      background-color: transparent !important;
+      border: 1px solid #ff8a8a !important;
+      color: #ff8a8a !important;
+    }
+
+  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class', // Enable class-based dark mode
+      theme: {
+        extend: {
+          colors: {
+            // Dark Theme Colors (new green)
+            'brand-bg': '#282a26',
+            'content-bg': '#282a26',
+            'sidebar-bg': '#282a26',
+            'card-bg': '#314D34',
+            'input-bg': '#314D34',
+            'brand-text': '#F9FAFB',
+            'brand-text-secondary': '#A0A0A0',
+            'brand-dark-green': '#004925', 
+            'brand-dark-green-text': '#D1D5DB',
+            'brand-dark-green-hover': '#006031',
+            'neutral-800-dark': '#3c5f3f', // hover for green card
+            'neutral-700-dark': '#314D34', // main card color
+            'neutral-600-dark': '#253b27', // border / secondary button
+            'neutral-500-dark': '#D1D5DB', // icon color for inputs
+
+            // Light Theme Colors (new forest green theme)
+            'brand-bg-light': '#e8f3f5',
+            'content-bg-light': '#FFFFFF',
+            'sidebar-bg-light': '#e8f3f5',
+            'card-bg-light': '#FFFFFF',
+            'input-bg-light': '#F3F4F6',
+            'brand-text-light': '#1f2937',
+            'brand-text-secondary-light': '#4b5563',
+            'brand-green': '#004925',
+            'brand-green-text': '#004925',
+            'brand-green-dark': '#003a1e',
+            'neutral-100-light': '#F3F4F6',
+            'neutral-200-light': '#E5E7EB',
+            'neutral-300-light': '#D1D5DB',
+            'neutral-400-light': '#9CA3AF',
+            'neutral-500-light': '#6B7280',
+          },
+          animation: {
+            modalShow: 'modalShow 0.3s ease-out forwards',
+          },
+          keyframes: {
+            modalShow: {
+              '0%': { transform: 'scale(0.95)', opacity: '0' },
+              '100%': { transform: 'scale(1)', opacity: '1' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="custom-scrollbar">
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
