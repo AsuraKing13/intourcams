@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ViewName } from '../../types.ts';
 import Header from '../Header.tsx';
 import HomeView from '../views/HomeView.tsx';
@@ -22,42 +22,35 @@ interface AuthenticatedLayoutProps {
 
 const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ handleLogout }) => {
   const { currentUser, isPhoneView } = useAppContext();
-  const [currentView, setCurrentView] = useState<ViewName>(ViewName.MainMenu);
+  const [currentView, setCurrentView] = useState<ViewName>(ViewName.Dashboard);
+  const mainScrollRef = useRef<HTMLElement>(null);
 
   const renderView = () => {
     const userRole = currentUser?.role?.trim().toLowerCase();
     
     switch (currentView) {
-      case ViewName.MainMenu: {
+      case ViewName.MainMenu:
         return <HomeView setCurrentView={setCurrentView} />;
-      }
-      case ViewName.Dashboard: {
+      case ViewName.Dashboard:
         return <DashboardView setCurrentView={setCurrentView} />;
-      }
-      case ViewName.AIPlanner: {
+      case ViewName.AIPlanner:
         return <AIPlannerView setCurrentView={setCurrentView} />;
-      }
-      case ViewName.TourismCluster: {
+      case ViewName.TourismCluster:
         return <TourismClustersView setCurrentView={setCurrentView} />;
-      }
-      case ViewName.TourismMapping: {
+      case ViewName.TourismMapping:
         return <TourismMappingView setCurrentView={setCurrentView} />;
-      }
       case ViewName.ManageMyClusters: {
         if (userRole === 'tourism player' || userRole === 'admin' || userRole === 'editor') {
           return <ManageMyClustersView setCurrentView={setCurrentView} />;
         }
         return <div className="text-center p-8"><h2 className="text-2xl font-semibold">Access Denied</h2><p>You do not have permission to view this page.</p></div>;
       }
-      case ViewName.GrantApplications: {
+      case ViewName.GrantApplications:
         return <GrantApplicationsView />;
-      }
-      case ViewName.TourismStatistics: {
+      case ViewName.TourismStatistics:
         return <TourismStatisticsView />;
-      }
-      case ViewName.EventsCalendar: {
+      case ViewName.EventsCalendar:
         return <EventsCalendarView />;
-      }
       case ViewName.UserManagement: {
         if (userRole === 'admin') {
             return <UserManagementView />;
@@ -76,29 +69,30 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ handleLogout 
         }
         return <div className="text-center p-8"><h2 className="text-2xl font-semibold">Access Denied</h2><p>You do not have permission to view this page.</p></div>;
       }
-      case ViewName.Settings: {
+      case ViewName.Settings:
         return <SettingsView />;
-      }
-      default: {
-        return <HomeView setCurrentView={setCurrentView} />;
-      }
+      default:
+        return <DashboardView setCurrentView={setCurrentView} />;
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-content-bg-light dark:bg-content-bg">
-      <Header 
-        currentView={currentView} 
-        setCurrentView={setCurrentView} 
-        handleLogout={handleLogout} 
-      />
-      <main className="pt-16">
-        <div className={`transition-all duration-500 ease-in-out ${isPhoneView ? 'max-w-sm mx-auto my-4 border-4 border-neutral-400 dark:border-neutral-600 rounded-2xl shadow-2xl overflow-hidden' : ''}`}>
-            <div className={currentView === ViewName.Dashboard ? '' : 'p-4 sm:p-6'}>
+    <div className="flex h-screen bg-brand-bg-light dark:bg-brand-bg">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header 
+          currentView={currentView} 
+          setCurrentView={setCurrentView} 
+          handleLogout={handleLogout}
+          scrollContainerRef={mainScrollRef}
+        />
+        <main ref={mainScrollRef} className="flex-1 overflow-x-hidden overflow-y-auto bg-content-bg-light dark:bg-content-bg custom-scrollbar pt-16">
+          <div className={`transition-all duration-500 ease-in-out ${isPhoneView ? 'max-w-sm mx-auto my-4 border-4 border-neutral-400 dark:border-neutral-600 rounded-2xl shadow-2xl overflow-hidden' : ''}`}>
+            <div className={currentView === ViewName.Dashboard ? 'mt-[-4rem]' : 'p-4 sm:p-6'}>
                {renderView()}
             </div>
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

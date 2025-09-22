@@ -1,8 +1,8 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useContext, useMemo, useRef } from 'react';
 import { type PostgrestError, type User as SupabaseUser, AuthError, type Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem, NestedNavItemType } from '../types.ts';
 import { useToast, type ToastType } from './ToastContext.tsx';
-import { MOCK_GRANT_CATEGORIES, MOCK_CREATIVE_CATEGORIES } from '../constants.tsx';
+import { MOCK_GRANT_CATEGORIES, MOCK_CREATIVE_CATEGORIES, NAV_ITEMS, HEADER_NAV_ITEMS } from '../constants.tsx';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
 import { api, supabase } from '../services/supabase.ts';
 import { parseGrantApplication } from '../utils/parsers.ts';
@@ -22,10 +22,12 @@ interface AppContextValue {
     clusters: Cluster[]; events: AppEvent[]; grantApplications: GrantApplication[]; notifications: Notification[]; users: User[];
     grantCategories: GrantCategory[]; creativeCategories: PrimaryCreativeCategoryDef[]; holidays: PublicHoliday[]; promotions: PromotionItem[];
     visitorAnalyticsData: VisitorAnalyticsData[]; clusterAnalytics: ClusterAnalytic[]; bannerImageUrl: string | null; bannerOverlayOpacity: number; isMaintenanceMode: boolean; maintenanceMessage: string;
+    myItinerary: ItineraryItem[]; HEADER_NAV_ITEMS: NestedNavItemType[];
     // Loading State
     isLoadingClusters: boolean; isLoadingEvents: boolean; isLoadingGrantApplications: boolean; isLoadingNotifications: boolean;
     isLoadingUsers: boolean; isLoadingGrantCategories: boolean; isLoadingCreativeCategories: boolean; isLoadingHolidays: boolean;
     isLoadingPromotions: boolean; isLoadingVisitorAnalytics: boolean; isLoadingClusterAnalytics: boolean; isLoadingBannerImage: boolean; isLoadingMaintenanceMode: boolean;
+    isLoadingItinerary: boolean;
     // Auth State
     currentUser: User | null; isAuthenticated: boolean; isInitializing: boolean; isLoggingOut: boolean; isPremiumUser: boolean;
     // UI State
@@ -106,8 +108,10 @@ interface AppContextValue {
     isLoadingFeedback: boolean;
     addFeedback: (content: string, isAnonymous: boolean, pageContext: string | null) => Promise<void>;
     updateFeedbackStatus: (id: string, status: FeedbackStatus) => Promise<void>;
-    // AI Insight Caching Actions
+    // AI & Itinerary Actions
     addItineraryItem: (itemId: string, itemType: 'cluster' | 'event', itemName: string) => Promise<void>;
+    removeItineraryItem: (itineraryItemId: string) => Promise<void>;
+    clearMyItinerary: () => Promise<void>;
     getCachedAiInsight: (viewName: string, filterKey: string) => Promise<{ content: string; data_last_updated_at: string } | null>;
     setCachedAiInsight: (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => Promise<void>;
     getLatestEventTimestampForYear: (year: number) => Promise<string | null>;
@@ -134,10 +138,12 @@ const initialDataState = {
     visitorAnalyticsData: [] as VisitorAnalyticsData[],
     clusterAnalytics: [] as ClusterAnalytic[],
     feedback: [] as Feedback[],
+    myItinerary: [] as ItineraryItem[],
     bannerImageUrl: null as string | null,
     bannerOverlayOpacity: 0.5,
     isMaintenanceMode: false,
     maintenanceMessage: '',
+    HEADER_NAV_ITEMS: HEADER_NAV_ITEMS,
     isLoadingClusters: true,
     isLoadingEvents: true,
     isLoadingGrantApplications: true,
@@ -150,6 +156,7 @@ const initialDataState = {
     isLoadingVisitorAnalytics: true,
     isLoadingClusterAnalytics: true,
     isLoadingFeedback: true,
+    isLoadingItinerary: true,
     isLoadingBannerImage: true,
     isLoadingMaintenanceMode: true,
 };
@@ -280,6 +287,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         finally { setState(prev => ({ ...prev, isLoadingFeedback: false })); }
     }, [handleError]);
 
+    const fetchMyItinerary = useCallback(async (currentUserId: string | null) => {
+        if (!currentUserId) {
+            setState(prev => ({...prev, myItinerary: [], isLoadingItinerary: false }));
+            return;
+        };
+        setState(prev => ({ ...prev, isLoadingItinerary: true }));
+        try {
+            const itineraryId = await api.findOrCreateItinerary(currentUserId);
+            const items = await api.fetchMyItineraryItems(itineraryId);
+            setState(prev => ({ ...prev, myItinerary: items }));
+        } catch (e) { handleError(e, 'Fetching itinerary'); }
+        finally { setState(prev => ({ ...prev, isLoadingItinerary: false })); }
+    }, [handleError]);
+
     const uploadVisitorAnalyticsBatch = useCallback(async (data: VisitorAnalyticsData[]) => {
         try {
             await api.uploadVisitorAnalyticsBatch(data);
@@ -306,19 +327,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         finally { setState(prev => ({ ...prev, isLoadingBannerImage: false, isLoadingMaintenanceMode: false })); }
     }, [handleError]);
 
-    const fetchAllData = useCallback(async () => {
+    const fetchAllData = useCallback(async (userId: string | null) => {
         Promise.allSettled([
             fetchClusters(), fetchEvents(), fetchGrantApplications(), fetchNotifications(),
             fetchUsers(), fetchHolidays(), refreshDashboardPromotions(), fetchVisitorAnalytics(), 
-            fetchFeedback(), fetchClusterAnalytics()
+            fetchFeedback(), fetchClusterAnalytics(), fetchMyItinerary(userId)
         ]);
-    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics]);
+    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics, fetchMyItinerary]);
     
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             try {
                 if (session) {
-                    if (initialAuthCheckCompleted.current) {
+                    const currentUserId = session.user.id;
+                    if (initialAuthCheckCompleted.current && auth.currentUser) {
+                        // This is a session refresh, not a new login. We can do a quick profile check.
                         const { data: userProfile, error: profileError } = await supabase
                             .from('users').select('*').eq('id', session.user.id).single();
                         if (profileError || !userProfile) {
@@ -327,36 +350,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         } else {
                             setAuth(prev => ({ ...prev, currentUser: userProfile as User, isAuthenticated: true }));
                         }
-                        return;
+                        return; // Avoid full re-fetch on simple refresh
                     }
+    
+                    // This is the initial login or first load with a session.
                     setAuth(prev => ({ ...prev, isInitializing: true }));
                     await fetchConfig();
                     const { data: userProfile, error: profileError } = await supabase.from('users').select('*').eq('id', session.user.id).single();
                     if (profileError || !userProfile) {
                         console.error('User profile fetch failed on initial load, signing out.', profileError);
                         await api.logoutUser();
-                        setAuth({ currentUser: null, isAuthenticated: false, isInitializing: false, isLoggingOut: false });
-                        return;
+                        return; // The state will be cleared by the subsequent SIGNED_OUT event.
                     }
                     setAuth({ currentUser: userProfile as User, isAuthenticated: true, isInitializing: false, isLoggingOut: false });
                     initialAuthCheckCompleted.current = true;
-                    fetchAllData();
+                    fetchAllData(currentUserId);
                 } else {
+                    // No session, which covers both initial load (no user) and explicit sign-out.
+                    // The previous logic incorrectly re-triggered the initializing state on logout.
+                    // This simplified logic ensures that whenever there's no session, we cleanly
+                    // transition to the guest state without getting stuck.
+                    setAuth({
+                        currentUser: null,
+                        isAuthenticated: false,
+                        isInitializing: false, // Key fix: ensure this is false to show the guest/login view
+                        isLoggingOut: false,   // Ensure this is reset
+                    });
+                    setState(initialDataState); // Reset all data to its initial state for a guest.
+                    initialAuthCheckCompleted.current = false;
+
                     if (_event === 'SIGNED_OUT') {
-                        setState(initialDataState); 
-                        setAuth({ currentUser: null, isAuthenticated: false, isInitializing: false, isLoggingOut: false });
-                        initialAuthCheckCompleted.current = false;
                         showToast("You have been logged out.", "success");
-                        fetchConfig();
-                        fetchAllData();
-                    } else {
-                        setAuth(prev => ({ ...prev, isInitializing: true }));
-                        setState(initialDataState);
-                        await fetchConfig();
-                        setAuth({ currentUser: null, isAuthenticated: false, isInitializing: false, isLoggingOut: false });
-                        initialAuthCheckCompleted.current = false;
-                        fetchAllData();
                     }
+                    
+                    // Fetch public data for the guest view.
+                    fetchConfig();
+                    fetchAllData(null);
                 }
             } catch (e) {
                 handleError(e, "Error during authentication state change.", true);
@@ -364,7 +393,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         });
         return () => { subscription.unsubscribe(); };
-    }, [fetchAllData, fetchConfig, handleError, showToast]);
+    }, [fetchAllData, fetchConfig, handleError, showToast, auth.currentUser]);
 
     useEffect(() => {
         const handleDbChange = (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
@@ -383,11 +412,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 case 'visitor_analytics': fetchVisitorAnalytics(); break;
                 case 'cluster_analytics': fetchClusterAnalytics(); break;
                 case 'feedback': fetchFeedback(); break;
+                case 'itinerary_items': fetchMyItinerary(auth.currentUser?.id || null); break;
             }
         };
         const channel = supabase.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public' }, handleDbChange).subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback]);
+    }, [auth.currentUser, fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback, fetchMyItinerary]);
 
     const loginUserWithPassword = useCallback(async (email: string, pass: string) => {
         const { error } = await api.loginUserWithPassword(email, pass);
@@ -934,6 +964,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         } catch (e) { handleError(e, "Adding item to itinerary"); }
     }, [auth.currentUser, showToast, handleError]);
+    
+    const removeItineraryItem = useCallback(async (itineraryItemId: string) => {
+        try {
+            await api.removeItineraryItem(itineraryItemId);
+            showToast("Item removed from itinerary.", "success");
+        } catch (e) { handleError(e, "Removing itinerary item"); }
+    }, [handleError, showToast]);
+
+    const clearMyItinerary = useCallback(async () => {
+        if (!auth.currentUser) return;
+        try {
+            const itineraryId = await api.findOrCreateItinerary(auth.currentUser.id);
+            await api.clearMyItinerary(itineraryId);
+            showToast("Itinerary cleared.", "success");
+        } catch (e) { handleError(e, "Clearing itinerary"); }
+    }, [auth.currentUser, handleError, showToast]);
 
     const togglePhoneView = () => setIsPhoneView(p => !p);
 
@@ -947,9 +993,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
     }), [
-        state, auth, isPhoneView, isPremiumUser, togglePhoneView,
+        state, auth, isPhoneView, isPremiumUser,
         loginUserWithPassword, registerUserWithEmailPassword, logoutUser, addGrantApplication, reapplyForGrant, rejectPendingApplication,
         makeConditionalOffer, acceptConditionalOffer, declineConditionalOffer, submitEarlyReport, submitFinalReport, approveEarlyReportAndDisburse,
         rejectEarlyReportSubmission, rejectFinalReportSubmission, completeGrantApplication, createSignedUrl, addCluster, addClustersBatch, updateCluster, deleteCluster,
@@ -958,7 +1004,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear,
+        togglePhoneView
     ]);
 
     return (

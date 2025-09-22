@@ -186,4 +186,4 @@ const MapPicker: React.FC<MapPickerProps> = ({ initialPosition, onLocationChange
     );
 };
 
-export default MapPicker;
+export default React.memo(MapPicker);

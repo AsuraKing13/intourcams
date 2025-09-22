@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { ViewName, NavItemType } from '../../types.ts';
 import { NAV_ITEMS } from '../../constants.tsx';
@@ -12,7 +13,6 @@ interface HomeViewProps {
 const HomeView: React.FC<HomeViewProps> = ({ setCurrentView }) => {
   const { currentUser } = useAppContext();
 
-  // FIX: Corrected ViewName.Home to ViewName.MainMenu to match the enum definition.
   const menuItems: NavItemType[] = NAV_ITEMS.filter(item => 
     item.name !== ViewName.MainMenu && item.name !== ViewName.Settings
   );

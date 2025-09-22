@@ -232,12 +232,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
   return (
     <>
       {isLoadingBannerImage ? (
-          <div className="relative w-full h-[calc(100vh-4rem)] bg-neutral-800 flex items-center justify-center">
+          <div className="relative w-full h-screen bg-neutral-800 flex items-center justify-center">
               <Spinner className="w-8 h-8 text-white"/>
           </div>
       ) : (
         <div 
-          className="relative w-full h-[calc(100vh-4rem)] bg-cover bg-center"
+          className="relative w-full h-screen bg-cover bg-center"
           style={{ backgroundImage: `url(${finalBannerUrl})` }}
         >
               <div 

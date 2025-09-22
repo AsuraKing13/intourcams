@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
-import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic, ItineraryItem } from '../types.ts';
 import { parseGrantApplication } from '../utils/parsers.ts';
 
 // --- Supabase Client ---
@@ -96,7 +96,7 @@ export const api = {
     logoutUser: () => supabase.auth.signOut(),
     updateCurrentUserName: (name: string) => supabase.auth.updateUser({ data: { name }}),
     updateCurrentUserPassword: (pass: string) => supabase.auth.updateUser({ password: pass }),
-    deleteCurrentUserAccount: () => supabase.rpc('delete_own_user_account'),
+    deleteCurrentUserAccount: () => supabase.rpc('delete_own_user_account', {}),
 
     // --- File Storage ---
     async uploadFile(bucket: string, file: File, userId: string, oldFileUrl?: string | null) {
@@ -132,111 +132,78 @@ export const api = {
     },
 
     // --- Grant Applications ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addGrantApplication: (newApplication: TablesInsert<'grant_applications'>) => supabaseClient.from('grant_applications').insert([newApplication] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    createAdminNotification: (payload: TablesInsert<'notifications'>) => supabaseClient.from('notifications').insert([payload] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    rejectPendingApplication: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_application', { p_application_id: appId, p_notes: notes } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    makeConditionalOffer: (appId: string, notes: string, amount: number) => supabaseClient.rpc('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    acceptConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: true } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    declineConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: false } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    submitReport: (appId: string, reportFile: any, reportType: 'early' | 'final') => supabaseClient.rpc('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    approveEarlyReportAndDisburse: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    rejectEarlyReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_early_report', { p_application_id: appId, p_notes: notes } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    rejectFinalReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_final_report', { p_application_id: appId, p_notes: notes } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    completeGrantApplication: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes } as any),
+    addGrantApplication: (newApplication: TablesInsert<'grant_applications'>) => supabaseClient.from('grant_applications').insert(newApplication),
+    createAdminNotification: (payload: TablesInsert<'notifications'>) => supabaseClient.from('notifications').insert(payload),
+    rejectPendingApplication: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_application', { p_application_id: appId, p_notes: notes }),
+    makeConditionalOffer: (appId: string, notes: string, amount: number) => supabaseClient.rpc('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }),
+    acceptConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }),
+    declineConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }),
+    submitReport: (appId: string, reportFile: any, reportType: 'early' | 'final') => supabaseClient.rpc('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }),
+    approveEarlyReportAndDisburse: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }),
+    rejectEarlyReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_early_report', { p_application_id: appId, p_notes: notes }),
+    rejectFinalReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_final_report', { p_application_id: appId, p_notes: notes }),
+    completeGrantApplication: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }),
 
     // --- Clusters ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addCluster: (newCluster: TablesInsert<'clusters'>) => supabaseClient.from('clusters').insert([newCluster] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addClustersBatch: (payload: TablesInsert<'clusters'>[]) => supabaseClient.from('clusters').insert(payload as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updateCluster: (id: string, data: TablesUpdate<'clusters'>) => supabaseClient.from('clusters').update(data as any).eq('id', id),
+    addCluster: (newCluster: TablesInsert<'clusters'>) => supabaseClient.from('clusters').insert(newCluster),
+    addClustersBatch: (payload: TablesInsert<'clusters'>[]) => supabaseClient.from('clusters').insert(payload),
+    updateCluster: (id: string, data: TablesUpdate<'clusters'>) => supabaseClient.from('clusters').update(data).eq('id', id),
     deleteCluster: (id: string) => supabaseClient.from('clusters').delete().eq('id', id),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    incrementClusterView: (clusterId: string) => supabaseClient.rpc('increment_cluster_view', { cluster_id_to_increment: clusterId } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    incrementClusterClick: (clusterId: string) => supabaseClient.rpc('increment_cluster_click', { cluster_id_to_increment: clusterId } as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    transferClusterOwnership: (clusterId: string, newOwnerId: string) => supabaseClient.rpc('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId } as any),
+    incrementClusterView: (clusterId: string) => supabaseClient.rpc('increment_cluster_view', { cluster_id_to_increment: clusterId }),
+    incrementClusterClick: (clusterId: string) => supabaseClient.rpc('increment_cluster_click', { cluster_id_to_increment: clusterId }),
+    transferClusterOwnership: (clusterId: string, newOwnerId: string) => supabaseClient.rpc('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }),
 
     // --- Cluster Reviews & Products ---
-    fetchReviewsForCluster: async (clusterId: string): Promise<ClusterReview[]> => {
-        // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-        const { data, error } = await supabaseClient.rpc('get_reviews_with_usernames', { p_cluster_id: clusterId } as any);
+    async fetchReviewsForCluster(clusterId: string): Promise<ClusterReview[]> {
+        const { data, error } = await supabaseClient.rpc('get_reviews_with_usernames', { p_cluster_id: clusterId });
         if (error) throw error;
         return data || [];
     },
-    addReviewForCluster: async (newReview: TablesInsert<'cluster_reviews'>) => {
-        // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-        const { data, error } = await supabaseClient.from('cluster_reviews').insert([newReview] as any).select().single();
+    async addReviewForCluster(newReview: TablesInsert<'cluster_reviews'>) {
+        const { data, error } = await supabaseClient.from('cluster_reviews').insert(newReview).select().single();
         if (error) throw error;
         return data;
     },
-    fetchProductsForCluster: async (clusterId: string): Promise<ClusterProduct[]> => {
+    async fetchProductsForCluster(clusterId: string): Promise<ClusterProduct[]> {
         const { data, error } = await supabaseClient.from('cluster_products').select('*').eq('cluster_id', clusterId).order('created_at', { ascending: false });
         if (error) throw error;
         return data || [];
     },
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addProduct: (newProduct: TablesInsert<'cluster_products'>) => supabaseClient.from('cluster_products').insert([newProduct] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updateProduct: (id: string, data: Partial<AddClusterProductData>) => supabaseClient.from('cluster_products').update(data as any).eq('id', id),
+    addProduct: (newProduct: TablesInsert<'cluster_products'>) => supabaseClient.from('cluster_products').insert(newProduct),
+    updateProduct: (id: string, data: Partial<AddClusterProductData>) => supabaseClient.from('cluster_products').update(data).eq('id', id),
     deleteProduct: (id: string) => supabaseClient.from('cluster_products').delete().eq('id', id),
 
     // --- Events ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addEvent: (newEvent: TablesInsert<'events'>) => supabaseClient.from('events').insert([newEvent] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updateEvent: (id: string, data: Partial<AddEventData>) => supabaseClient.from('events').update(data as any).eq('id', id),
+    addEvent: (newEvent: TablesInsert<'events'>) => supabaseClient.from('events').insert(newEvent),
+    updateEvent: (id: string, data: Partial<AddEventData>) => supabaseClient.from('events').update(data).eq('id', id),
     deleteEvent: (id: string) => supabaseClient.from('events').delete().eq('id', id),
 
     // --- Notifications ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    markNotificationAsRead: (id: string, payload: TablesUpdate<'notifications'>) => supabaseClient.from('notifications').update(payload as any).eq('id', id),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    clearAllNotifications: (notificationIds: string[]) => supabaseClient.rpc('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds } as any),
+    markNotificationAsRead: (id: string, payload: TablesUpdate<'notifications'>) => supabaseClient.from('notifications').update(payload).eq('id', id),
+    clearAllNotifications: (notificationIds: string[]) => supabaseClient.rpc('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }),
     deleteGlobalNotification: (id: string) => supabaseClient.from('notifications').delete().eq('id', id),
 
     // --- User Management ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    editUser: (id: string, payload: TablesUpdate<'users'>) => supabaseClient.from('users').update(payload as any).eq('id', id),
+    editUser: (id: string, payload: TablesUpdate<'users'>) => supabaseClient.from('users').update(payload).eq('id', id),
     
     // --- Feedback ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addFeedback: (payload: TablesInsert<'feedback'>) => supabaseClient.from('feedback').insert([payload] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updateFeedbackStatus: (id: string, status: FeedbackStatus) => supabaseClient.from('feedback').update({ status } as any).eq('id', id),
+    addFeedback: (payload: TablesInsert<'feedback'>) => supabaseClient.from('feedback').insert(payload),
+    updateFeedbackStatus: (id: string, status: FeedbackStatus) => supabaseClient.from('feedback').update({ status }).eq('id', id),
     
     // --- Promotions ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addPromotion: (payload: TablesInsert<'promotions'>) => supabaseClient.from('promotions').insert([payload] as any),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updatePromotion: (id: number, payload: TablesUpdate<'promotions'>) => supabaseClient.from('promotions').update(payload as any).eq('id', id),
+    addPromotion: (payload: TablesInsert<'promotions'>) => supabaseClient.from('promotions').insert(payload),
+    updatePromotion: (id: number, payload: TablesUpdate<'promotions'>) => supabaseClient.from('promotions').update(payload).eq('id', id),
     deletePromotion: (id: number) => supabaseClient.from('promotions').delete().eq('id', id),
 
     // --- Website Management ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    updateAppConfig: (payload: TablesUpdate<'app_config'>, key: string) => supabaseClient.from('app_config').update(payload as any).eq('key', key),
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    upsertAppConfig: (payload: TablesInsert<'app_config'>) => supabaseClient.from('app_config').upsert(payload as any),
+    updateAppConfig: (payload: TablesUpdate<'app_config'>, key: string) => supabaseClient.from('app_config').update(payload).eq('key', key),
+    upsertAppConfig: (payload: TablesInsert<'app_config'>) => supabaseClient.from('app_config').upsert(payload),
     setSiteBanner: async (message: string, expires_at: string | null) => {
         // This is a multi-step operation, so it's kept as a single function
         const { data: bannersToDelete, error: fetchError } = await supabaseClient.from('notifications').select('id').eq('recipient_id', 'global_banner');
         if (fetchError) throw fetchError;
-        // FIX: Casted `bannersToDelete` to `any[]` because type inference fails and returns `never[]`.
-        if (bannersToDelete && (bannersToDelete as any[]).length > 0) {
-            const ids = (bannersToDelete as any[]).map(b => b.id);
+        if (bannersToDelete && bannersToDelete.length > 0) {
+            const ids = bannersToDelete.map(b => b.id);
             const { error: deleteError } = await supabaseClient.from('notifications').delete().in('id', ids);
             if (deleteError) throw deleteError;
         }
@@ -244,32 +211,26 @@ export const api = {
             id: crypto.randomUUID(), recipient_id: 'global_banner', message, 
             type: 'status_change', timestamp: new Date().toISOString(), expires_at 
         };
-        // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-        const { error: insertError } = await supabaseClient.from('notifications').insert([newBanner] as any);
-        if (insertError) throw insertError;
+        await supabaseClient.from('notifications').insert(newBanner);
     },
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    sendGlobalPanelNotification: (message: string) => supabaseClient.rpc('send_notification_to_all_users', { p_message: message } as any),
+    sendGlobalPanelNotification: (message: string) => supabaseClient.rpc('send_notification_to_all_users', { p_message: message }),
 
     // --- Analytics ---
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => supabaseClient.rpc('upload_visitor_analytics_batch', { p_data: data as unknown as Json } as any),
-    getDailyClusterAnalytics: async (clusterId: string, periodDays: number) => {
-        // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-        const { data, error } = await supabaseClient.rpc('get_daily_cluster_analytics', { p_cluster_id: clusterId, p_period_days: periodDays } as any);
+    uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => supabaseClient.rpc('upload_visitor_analytics_batch', { p_data: data as unknown as Json }),
+    async getDailyClusterAnalytics(clusterId: string, periodDays: number) {
+        const { data, error } = await supabaseClient.rpc('get_daily_cluster_analytics', { p_cluster_id: clusterId, p_period_days: periodDays });
         if (error) throw error;
         return data || [];
     },
 
     // --- AI Caching ---
-    getCachedAiInsight: async (viewName: string, filterKey: string) => {
+    async getCachedAiInsight(viewName: string, filterKey: string) {
         const { data, error } = await supabaseClient.from('ai_insights').select('content, data_last_updated_at').eq('view_name', viewName).eq('filter_key', filterKey).single();
         if (error && error.code !== 'PGRST116') throw error; // Ignore "not found" errors
         return data;
     },
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
     setCachedAiInsight: (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => supabaseClient.from('ai_insights').upsert(
-        [{ view_name: viewName, filter_key: filterKey, content, data_last_updated_at: dataLastUpdatedAt }] as any,
+        { view_name: viewName, filter_key: filterKey, content, data_last_updated_at: dataLastUpdatedAt },
         { onConflict: 'view_name,filter_key' }
     ),
     getLatestEventTimestampForYear: async (year: number) => {
@@ -281,18 +242,21 @@ export const api = {
     },
 
     // --- Itinerary ---
-    findOrCreateItinerary: async (userId: string) => {
+    async findOrCreateItinerary(userId: string): Promise<string> {
         const { data, error } = await supabaseClient.from('itineraries').select('id').eq('user_id', userId).limit(1).single();
         if (error && error.code !== 'PGRST116') throw error;
-        // FIX: Casted `data` to `any` because type inference fails and returns `never`.
-        if (data) return (data as any).id;
+        if (data) return data.id;
         
-        // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-        const { data: newData, error: createError } = await supabaseClient.from('itineraries').insert([{ user_id: userId, name: "My Sarawak Trip" }] as any).select('id').single();
-        // FIX: Casted `newData` to `any` because type inference fails and returns `never`.
+        const { data: newData, error: createError } = await supabaseClient.from('itineraries').insert({ user_id: userId, name: "My Sarawak Trip" }).select('id').single();
         if (createError || !newData) throw createError || new Error("Failed to create itinerary.");
-        return (newData as any).id;
+        return newData.id;
     },
-    // FIX: Casted argument to `any` to bypass TypeScript error due to broken type inference.
-    addItineraryItem: (newItem: TablesInsert<'itinerary_items'>) => supabaseClient.from('itinerary_items').upsert([newItem] as any, { onConflict: 'itinerary_id,item_id' }),
+    async fetchMyItineraryItems(itineraryId: string): Promise<ItineraryItem[]> {
+        const { data, error } = await supabaseClient.from('itinerary_items').select('*').eq('itinerary_id', itineraryId).order('added_at', { ascending: true });
+        if (error) throw error;
+        return data || [];
+    },
+    addItineraryItem: (newItem: TablesInsert<'itinerary_items'>) => supabaseClient.from('itinerary_items').upsert(newItem, { onConflict: 'itinerary_id,item_id' }),
+    removeItineraryItem: (itemId: string) => supabaseClient.from('itinerary_items').delete().eq('id', itemId),
+    clearMyItinerary: (itineraryId: string) => supabaseClient.from('itinerary_items').delete().eq('itinerary_id', itineraryId),
 };

@@ -73,7 +73,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ onSwitchToLogin }) => {
         />
         <GlobalNotificationBanner notifications={notifications} onVisibilityChange={setIsBannerVisible} />
         <main className={`transition-all duration-300 ${isBannerVisible ? 'pt-[calc(4rem+2.75rem)]' : 'pt-16'}`}>
-           <div className={currentView === ViewName.Dashboard ? '' : "p-4 sm:p-6"}>
+           <div className={currentView === ViewName.Dashboard ? 'mt-[-4rem]' : "p-4 sm:p-6"}>
                 {renderView()}
             </div>
         </main>

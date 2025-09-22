@@ -137,7 +137,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({ isOpen, onClose, cl
 
 
 const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentView }) => {
-    const { currentUser, users, clusters, updateCluster, uploadClusterImage, getDailyClusterAnalytics, fetchProductsForCluster, deleteProduct } = useAppContext();
+    const { currentUser, users, clusters, updateCluster, uploadClusterImage, getDailyClusterAnalytics, fetchProductsForCluster, deleteProduct, deleteCluster } = useAppContext();
     const { showToast } = useToast();
     const { theme } = useContext(ThemeContext);
 
@@ -158,6 +158,11 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
     const [productToDelete, setProductToDelete] = useState<ClusterProduct | null>(null);
     const [isDeletingProduct, setIsDeletingProduct] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
+    // New state for deleting a cluster
+    const [clusterToDelete, setClusterToDelete] = useState<Cluster | null>(null);
+    const [isDeletingCluster, setIsDeletingCluster] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
     const isAdminOrEditor = useMemo(() => currentUser?.role === 'Admin' || currentUser?.role === 'Editor', [currentUser]);
 
@@ -184,6 +189,9 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
         if (!selectedClusterId && userClusters.length > 0) {
             setSelectedClusterId(userClusters[0].id);
         }
+         if (selectedClusterId && !userClusters.some(c => c.id === selectedClusterId)) {
+            setSelectedClusterId(userClusters[0]?.id || null);
+        }
     }, [userClusters, selectedClusterId]);
 
     const loadProducts = useCallback(async () => {
@@ -199,6 +207,7 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
 
     useEffect(() => {
         if (selectedClusterId) {
+            setMode('view');
             loadProducts();
             setIsAnalyticsLoading(true);
             getDailyClusterAnalytics(selectedClusterId, 30).then(data => {
@@ -307,6 +316,21 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
         await loadProducts();
         setIsDeletingProduct(false);
     };
+
+    const handleConfirmDeleteCluster = async () => {
+        if (!clusterToDelete || deleteConfirmText !== clusterToDelete.name) {
+            showToast("Confirmation text does not match.", "error");
+            return;
+        }
+        setIsDeletingCluster(true);
+        const success = await deleteCluster(clusterToDelete.id);
+        if (success) {
+            showToast(`Cluster "${clusterToDelete.name}" has been deleted.`, "success");
+            setClusterToDelete(null);
+            setDeleteConfirmText('');
+        }
+        setIsDeletingCluster(false);
+    };
     
     const chartColors = useMemo(() => ({
         axisStroke: theme === 'dark' ? '#A0A0A0' : '#566573',
@@ -318,16 +342,14 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
     }), [theme]);
     const chartTextStyle = { fill: chartColors.axisStroke, fontSize: 12 };
 
-    if (userClusters.length === 0) {
+    if (userClusters.length === 0 && !isAdminOrEditor) {
         return (
             <div className="text-center py-12">
                 <h2 className="text-xl font-semibold text-brand-text-light dark:text-brand-text">No Clusters to Manage</h2>
                 <p className="mt-2 text-brand-text-secondary-light dark:text-brand-text-secondary">
-                    {isAdminOrEditor ? "There are no clusters in the system." : "You have not added any tourism clusters yet."}
+                    You have not added any tourism clusters yet.
                 </p>
-                {!isAdminOrEditor && (
-                    <Button className="mt-4" onClick={() => setCurrentView(ViewName.TourismCluster)}>Add Your First Cluster</Button>
-                )}
+                <Button className="mt-4" onClick={() => setCurrentView(ViewName.TourismCluster)}>Add Your First Cluster</Button>
             </div>
         );
     }
@@ -346,20 +368,23 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
                 )}
             </div>
 
-            {isAdminOrEditor && (
-                <Card>
-                    <Select label="Select a Cluster to Manage" options={clusterOptions} value={selectedClusterId || ''} onChange={(e) => setSelectedClusterId(e.target.value)} />
-                </Card>
-            )}
+            <Card>
+                <Select label="Select a Cluster to Manage" options={clusterOptions} value={selectedClusterId || ''} onChange={(e) => setSelectedClusterId(e.target.value)} />
+            </Card>
 
             {!selectedCluster ? (
-                <div className="text-center py-10"><Spinner /></div>
+                 <div className="text-center py-10">
+                    {clusters.length > 0 ? <Spinner /> : <p>No clusters available to manage.</p>}
+                </div>
             ) : (
                 <>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <Card title="Cluster Details" className="lg:col-span-1" actions={
                         mode === 'view' ? (
-                            <Button variant="primary" size="sm" onClick={handleEditClick} leftIcon={<PencilIcon className="w-4 h-4" />}>Edit</Button>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" size="sm" onClick={() => setClusterToDelete(selectedCluster)}>Delete</Button>
+                                <Button variant="primary" size="sm" onClick={handleEditClick} leftIcon={<PencilIcon className="w-4 h-4" />}>Edit</Button>
+                            </div>
                         ) : (
                             <Button variant="ghost" size="sm" onClick={handleCancelEdit} leftIcon={<ArrowUturnLeftIcon className="w-4 h-4" />}>Cancel</Button>
                         )
@@ -509,6 +534,58 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
                 )}
                 </>
             )}
+            
+            {/* Delete Cluster Confirmation Modal */}
+            <Modal
+                isOpen={!!clusterToDelete}
+                onClose={() => {
+                    setClusterToDelete(null);
+                    setDeleteConfirmText('');
+                }}
+                title={`Delete Cluster: ${clusterToDelete?.name}`}
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-brand-text-light dark:text-brand-text">
+                        This action is <strong className="text-red-500">irreversible</strong>. It will permanently delete the cluster, its products, and all associated analytics.
+                    </p>
+                    <p className="text-sm text-brand-text-secondary-light dark:text-brand-text-secondary">
+                        To confirm, please type the full name of the cluster below:
+                    </p>
+                    <p className="p-2.5 rounded-lg bg-neutral-100-light dark:bg-neutral-700-dark text-center font-semibold text-brand-text-light dark:text-brand-text">
+                        {clusterToDelete?.name}
+                    </p>
+                    <Input
+                        label="Confirm Cluster Name"
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        required
+                        disabled={isDeletingCluster}
+                        placeholder="Type the cluster name here..."
+                    />
+                    <div className="flex justify-end space-x-3 pt-4">
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setClusterToDelete(null);
+                                setDeleteConfirmText('');
+                            }}
+                            disabled={isDeletingCluster}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            className="bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 focus:ring-red-500"
+                            isLoading={isDeletingCluster}
+                            disabled={isDeletingCluster || deleteConfirmText !== clusterToDelete?.name}
+                            onClick={handleConfirmDeleteCluster}
+                        >
+                            Permanently Delete
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

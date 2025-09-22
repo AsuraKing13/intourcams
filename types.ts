@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import type { Database } from './database.types.ts';
 
@@ -147,6 +148,14 @@ export interface NavItemType {
   name: ViewName;
   icon: React.FC<{ className?: string }>;
 }
+
+export interface NestedNavItemType {
+  name: string;
+  icon: React.FC<{ className?: string }>;
+  view?: ViewName;
+  children?: Omit<NestedNavItemType, 'children'>[];
+}
+
 
 export interface RecentActivity {
   id: string;

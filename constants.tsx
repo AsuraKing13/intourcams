@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { ViewName, NavItemType, UserRole, GrantCategory, PrimaryCreativeCategoryDef } from './types.ts';
+import { ViewName, NavItemType, UserRole, GrantCategory, PrimaryCreativeCategoryDef, NestedNavItemType } from './types.ts';
 import {
   CheckCircleIcon as SolidCheckCircleIcon, XCircleIcon as SolidXCircleIcon, ClockIcon as SolidClockIcon,
   ArrowPathIcon as SolidArrowPathIcon, PaperClipIcon as SolidPaperClipIcon, ArrowDownCircleIcon as SolidArrowDownCircleIcon,
@@ -17,6 +17,10 @@ import {
   CursorArrowRaysIcon as SolidCursorArrowRaysIcon,
   AdjustmentsHorizontalIcon as SolidAdjustmentsHorizontalIcon,
   MapIcon as SolidMapIcon,
+  Squares2X2Icon as SolidSquares2X2Icon,
+  HomeIcon as SolidHomeIcon,
+  DocumentChartBarIcon as SolidDocumentChartBarIcon,
+  BuildingLibraryIcon as SolidBuildingLibraryIcon,
 } from '@heroicons/react/24/solid';
 
 // =================================================================
@@ -53,6 +57,9 @@ export const DevicePhoneMobileIcon = SolidDevicePhoneMobileIcon;
 export const CursorArrowRaysIcon = SolidCursorArrowRaysIcon;
 export const AccessibilityIcon = SolidAdjustmentsHorizontalIcon;
 export const MapIcon = SolidMapIcon;
+export const AppMenuIcon = SolidSquares2X2Icon;
+export const DocumentChartBarIcon = SolidDocumentChartBarIcon;
+export const BuildingLibraryIcon = SolidBuildingLibraryIcon;
 export { SolidCalendarDaysIcon as CalendarDaysIcon };
 
 
@@ -87,7 +94,7 @@ export const LogoIcon: React.FC<{ className?: string }> = ({ className = "h-16 w
 );
 
 // --- NAVIGATION ICONS ---
-export const HomeIcon: React.FC<{ className?: string }> = ({ className }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>);
+export const HomeIcon: React.FC<{ className?: string }> = SolidHomeIcon;
 export const DashboardIcon: React.FC<{ className?: string }> = ({ className }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>);
 export const TourismClusterIcon: React.FC<{ className?: string }> = ({ className }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M5 6h14M5 9h14m0 3H5m14 3H5m14 3H5M5 21v-5.172a2 2 0 01.586-1.414l2.828-2.828a2 2 0 012.828 0l2.828 2.828a2 2 0 01.586 1.414V21M5 21h14" /></svg>);
 export const GrantApplicationsIcon: React.FC<{ className?: string }> = ({ className }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>);
@@ -173,10 +180,10 @@ export const PROMOTION_CTA_VIEWS: ViewName[] = [
 // --- APP CONFIGURATION CONSTANTS ---
 export const USER_ROLES: UserRole[] = ['Admin', 'Editor', 'User', 'Tourism Player'];
 
-/** Main navigation items for authenticated users. */
+/** Main navigation items for the collapsible sidebar (mobile overlay). */
 export const NAV_ITEMS: NavItemType[] = [
-  { name: ViewName.MainMenu, icon: HomeIcon },
-  { name: ViewName.Dashboard, icon: DashboardIcon },
+  { name: ViewName.Dashboard, icon: HomeIcon },
+  { name: ViewName.MainMenu, icon: AppMenuIcon },
   { name: ViewName.AIPlanner, icon: SparklesIcon },
   { name: ViewName.TourismCluster, icon: TourismClusterIcon },
   { name: ViewName.TourismMapping, icon: MapIcon },
@@ -187,12 +194,65 @@ export const NAV_ITEMS: NavItemType[] = [
   { name: ViewName.UserManagement, icon: UserManagementIcon },
   { name: ViewName.WebsiteManagement, icon: WebsiteManagementIcon },
   { name: ViewName.SystemFeedback, icon: ChatBubbleBottomCenterTextIcon },
-  { name: ViewName.Settings, icon: SettingsIcon },
+];
+
+/** Nested navigation items for the top header bar, supporting dropdowns. */
+export const HEADER_NAV_ITEMS: NestedNavItemType[] = [
+  { name: 'Home', icon: HomeIcon, view: ViewName.Dashboard },
+  { name: 'Planner', icon: SparklesIcon, view: ViewName.AIPlanner },
+  {
+    name: 'Explore',
+    icon: MapIcon,
+    children: [
+      { name: ViewName.TourismCluster, icon: TourismClusterIcon, view: ViewName.TourismCluster },
+      { name: ViewName.TourismMapping, icon: MapIcon, view: ViewName.TourismMapping },
+      { name: ViewName.EventsCalendar, icon: EventsCalendarIcon, view: ViewName.EventsCalendar },
+    ]
+  },
+  {
+    name: 'Management',
+    icon: BuildingLibraryIcon,
+    children: [
+      { name: ViewName.ManageMyClusters, icon: CursorArrowRaysIcon, view: ViewName.ManageMyClusters },
+      { name: ViewName.WebsiteManagement, icon: WebsiteManagementIcon, view: ViewName.WebsiteManagement },
+    ]
+  },
+  {
+    name: 'Data & Grants',
+    icon: DocumentChartBarIcon,
+    children: [
+      { name: ViewName.GrantApplications, icon: GrantApplicationsIcon, view: ViewName.GrantApplications },
+      { name: ViewName.TourismStatistics, icon: EventAnalyticsIcon, view: ViewName.TourismStatistics },
+    ]
+  },
+   {
+    name: 'Admin',
+    icon: UserManagementIcon,
+    children: [
+      { name: ViewName.UserManagement, icon: UserManagementIcon, view: ViewName.UserManagement },
+      { name: ViewName.SystemFeedback, icon: ChatBubbleBottomCenterTextIcon, view: ViewName.SystemFeedback },
+    ]
+  },
 ];
 
 /** Navigation items for guest users. */
+export const GUEST_HEADER_NAV_ITEMS: NestedNavItemType[] = [
+  { name: 'Home', icon: HomeIcon, view: ViewName.Dashboard },
+  { name: 'Planner', icon: SparklesIcon, view: ViewName.AIPlanner },
+  {
+    name: 'Explore',
+    icon: MapIcon,
+    children: [
+      { name: ViewName.TourismCluster, icon: TourismClusterIcon, view: ViewName.TourismCluster },
+      { name: ViewName.TourismMapping, icon: MapIcon, view: ViewName.TourismMapping },
+      { name: ViewName.EventsCalendar, icon: EventsCalendarIcon, view: ViewName.EventsCalendar },
+    ]
+  },
+  { name: 'Statistics', icon: EventAnalyticsIcon, view: ViewName.TourismStatistics },
+];
+
 export const GUEST_NAV_ITEMS: NavItemType[] = [
-  { name: ViewName.Dashboard, icon: DashboardIcon },
+  { name: ViewName.Dashboard, icon: HomeIcon },
   { name: ViewName.AIPlanner, icon: SparklesIcon },
   { name: ViewName.TourismCluster, icon: TourismClusterIcon },
   { name: ViewName.TourismMapping, icon: MapIcon },
