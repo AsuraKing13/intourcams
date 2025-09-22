@@ -2,8 +2,8 @@ import React, { useContext, useMemo, useState } from 'react';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
 import Select from '../ui/Select.tsx';
-import { DownloadIcon, UsersIcon, CalendarDaysIcon, UploadCloudIcon } from '../../constants.tsx';
-import { GlobeAltIcon } from '@heroicons/react/24/solid';
+// FIX: Import GlobeAltIcon from constants.tsx for consistency.
+import { DownloadIcon, UsersIcon, CalendarDaysIcon, UploadCloudIcon, GlobeAltIcon } from '../../constants.tsx';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line } from 'recharts';
 import { ThemeContext } from '../ThemeContext.tsx';
 import { useAppContext } from '../AppContext.tsx';

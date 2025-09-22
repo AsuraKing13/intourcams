@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { ViewName } from '../../types.ts';
 import Header from '../Header.tsx';
 import HomeView from '../views/HomeView.tsx';
@@ -15,15 +16,32 @@ import { useAppContext } from '../AppContext.tsx';
 import TourismMappingView from '../views/TourismMappingView.tsx';
 import FeedbackManagementView from '../views/FeedbackManagementView.tsx';
 import AIPlannerView from '../views/AIPlannerView.tsx';
+import Footer from '../ui/Footer.tsx';
 
 interface AuthenticatedLayoutProps {
   handleLogout: () => void;
 }
 
 const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ handleLogout }) => {
-  const { currentUser, isPhoneView } = useAppContext();
+  const { currentUser, isPhoneView, logPageView } = useAppContext();
   const [currentView, setCurrentView] = useState<ViewName>(ViewName.Dashboard);
   const mainScrollRef = useRef<HTMLElement>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionIdRef.current) {
+        let sid = sessionStorage.getItem('app_session_id');
+        if (!sid) {
+            sid = crypto.randomUUID();
+            sessionStorage.setItem('app_session_id', sid);
+        }
+        sessionIdRef.current = sid;
+    }
+    if (sessionIdRef.current) {
+        logPageView(currentView, sessionIdRef.current);
+    }
+  }, [currentView, logPageView]);
+
 
   const renderView = () => {
     const userRole = currentUser?.role?.trim().toLowerCase();
@@ -91,6 +109,7 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ handleLogout 
                {renderView()}
             </div>
           </div>
+          <Footer />
         </main>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { ViewName } from '../../types.ts';
 import Header from '../Header.tsx';
 import DashboardView from '../views/DashboardView.tsx';
@@ -12,6 +13,8 @@ import GlobalNotificationBanner from '../ui/GlobalNotificationBanner.tsx';
 import { useAppContext } from '../AppContext.tsx';
 import TourismMappingView from '../views/TourismMappingView.tsx';
 import AIPlannerView from '../views/AIPlannerView.tsx';
+import Spinner from '../ui/Spinner.tsx';
+import Footer from '../ui/Footer.tsx';
 
 interface GuestLayoutProps {
   onSwitchToLogin: () => void;
@@ -23,8 +26,23 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ onSwitchToLogin }) => {
   const [loginPromptMessage, setLoginPromptMessage] = useState('');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRegistrationModalOpen, setIsRegistrationModalOpen] = useState(false);
-  const { notifications } = useAppContext();
+  const { notifications, logPageView } = useAppContext();
   const [isBannerVisible, setIsBannerVisible] = useState(false);
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionIdRef.current) {
+        let sid = sessionStorage.getItem('app_session_id');
+        if (!sid) {
+            sid = crypto.randomUUID();
+            sessionStorage.setItem('app_session_id', sid);
+        }
+        sessionIdRef.current = sid;
+    }
+    if (sessionIdRef.current) {
+        logPageView(currentView, sessionIdRef.current);
+    }
+  }, [currentView, logPageView]);
 
 
   const handleAuthRequired = (message?: string) => {
@@ -63,7 +81,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ onSwitchToLogin }) => {
 
   return (
     <>
-      <div className="relative min-h-screen bg-content-bg-light dark:bg-content-bg">
+      <div className="relative min-h-screen bg-content-bg-light dark:bg-content-bg flex flex-col">
         <Header 
           currentView={currentView} 
           setCurrentView={setCurrentView} 
@@ -72,11 +90,12 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ onSwitchToLogin }) => {
           onRegister={() => setIsRegistrationModalOpen(true)}
         />
         <GlobalNotificationBanner notifications={notifications} onVisibilityChange={setIsBannerVisible} />
-        <main className={`transition-all duration-300 ${isBannerVisible ? 'pt-[calc(4rem+2.75rem)]' : 'pt-16'}`}>
+        <main className={`flex-grow transition-all duration-300 ${isBannerVisible ? 'pt-[calc(4rem+2.75rem)]' : 'pt-16'}`}>
            <div className={currentView === ViewName.Dashboard ? 'mt-[-4rem]' : "p-4 sm:p-6"}>
                 {renderView()}
             </div>
         </main>
+        <Footer />
       </div>
       <LoginPromptModal
         isOpen={isLoginPromptOpen}

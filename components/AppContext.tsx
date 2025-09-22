@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useContext, useMemo, useRef } from 'react';
 import { type PostgrestError, type User as SupabaseUser, AuthError, type Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem, NestedNavItemType } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem, NestedNavItemType, WebsiteTrafficSummary } from '../types.ts';
 import { useToast, type ToastType } from './ToastContext.tsx';
 import { MOCK_GRANT_CATEGORIES, MOCK_CREATIVE_CATEGORIES, NAV_ITEMS, HEADER_NAV_ITEMS } from '../constants.tsx';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
@@ -22,12 +22,12 @@ interface AppContextValue {
     clusters: Cluster[]; events: AppEvent[]; grantApplications: GrantApplication[]; notifications: Notification[]; users: User[];
     grantCategories: GrantCategory[]; creativeCategories: PrimaryCreativeCategoryDef[]; holidays: PublicHoliday[]; promotions: PromotionItem[];
     visitorAnalyticsData: VisitorAnalyticsData[]; clusterAnalytics: ClusterAnalytic[]; bannerImageUrl: string | null; bannerOverlayOpacity: number; isMaintenanceMode: boolean; maintenanceMessage: string;
-    myItinerary: ItineraryItem[]; HEADER_NAV_ITEMS: NestedNavItemType[];
+    myItinerary: ItineraryItem[]; HEADER_NAV_ITEMS: NestedNavItemType[]; websiteTrafficSummary: WebsiteTrafficSummary | null; publicTotalVisits: number | null;
     // Loading State
     isLoadingClusters: boolean; isLoadingEvents: boolean; isLoadingGrantApplications: boolean; isLoadingNotifications: boolean;
     isLoadingUsers: boolean; isLoadingGrantCategories: boolean; isLoadingCreativeCategories: boolean; isLoadingHolidays: boolean;
     isLoadingPromotions: boolean; isLoadingVisitorAnalytics: boolean; isLoadingClusterAnalytics: boolean; isLoadingBannerImage: boolean; isLoadingMaintenanceMode: boolean;
-    isLoadingItinerary: boolean;
+    isLoadingItinerary: boolean; isLoadingWebsiteTraffic: boolean; isLoadingPublicTotalVisits: boolean;
     // Auth State
     currentUser: User | null; isAuthenticated: boolean; isInitializing: boolean; isLoggingOut: boolean; isPremiumUser: boolean;
     // UI State
@@ -104,6 +104,7 @@ interface AppContextValue {
     // Analytics Actions
     getDailyClusterAnalytics: (clusterId: string, periodDays: number) => Promise<{ date: string, views: number, clicks: number }[]>;
     uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => Promise<void>;
+    logPageView: (pagePath: string, sessionId: string) => Promise<void>;
     feedback: Feedback[];
     isLoadingFeedback: boolean;
     addFeedback: (content: string, isAnonymous: boolean, pageContext: string | null) => Promise<void>;
@@ -136,6 +137,8 @@ const initialDataState = {
     holidays: [] as PublicHoliday[],
     promotions: [] as PromotionItem[],
     visitorAnalyticsData: [] as VisitorAnalyticsData[],
+    websiteTrafficSummary: null as WebsiteTrafficSummary | null,
+    publicTotalVisits: null as number | null,
     clusterAnalytics: [] as ClusterAnalytic[],
     feedback: [] as Feedback[],
     myItinerary: [] as ItineraryItem[],
@@ -154,6 +157,8 @@ const initialDataState = {
     isLoadingHolidays: true,
     isLoadingPromotions: true,
     isLoadingVisitorAnalytics: true,
+    isLoadingWebsiteTraffic: true,
+    isLoadingPublicTotalVisits: true,
     isLoadingClusterAnalytics: true,
     isLoadingFeedback: true,
     isLoadingItinerary: true,
@@ -172,7 +177,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isLoggingOut: boolean;
     }>({ currentUser: null, isAuthenticated: false, isInitializing: true, isLoggingOut: false });
     const [isPhoneView, setIsPhoneView] = useState(false);
-    const initialAuthCheckCompleted = useRef(false);
 
     const isPremiumUser = useMemo(() => {
         if (!auth.currentUser) return false;
@@ -269,6 +273,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [handleError]);
     
+    const fetchWebsiteTrafficSummary = useCallback(async () => {
+        setState(prev => ({ ...prev, isLoadingWebsiteTraffic: true, websiteTrafficSummary: null }));
+        try {
+            const summary = await api.getWebsiteTrafficSummary(7);
+            setState(prev => ({ ...prev, websiteTrafficSummary: summary }));
+        } catch (e) {
+            handleError(e, 'Fetching website traffic summary');
+        } finally {
+            setState(prev => ({ ...prev, isLoadingWebsiteTraffic: false }));
+        }
+    }, [handleError]);
+
+    const fetchPublicTotalVisits = useCallback(async () => {
+        setState(prev => ({...prev, isLoadingPublicTotalVisits: true}));
+        try {
+            const count = await api.getPublicTotalVisits();
+            setState(prev => ({...prev, publicTotalVisits: count ?? 0 }));
+        } catch (e) {
+            handleError(e, "Could not load total site visits", true);
+            setState(prev => ({...prev, publicTotalVisits: 0 })); // Default to 0 on error
+        } finally {
+            setState(prev => ({...prev, isLoadingPublicTotalVisits: false}));
+        }
+    }, [handleError]);
+
     const fetchClusterAnalytics = useCallback(async () => {
         setState(prev => ({ ...prev, isLoadingClusterAnalytics: true }));
         try {
@@ -327,73 +356,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         finally { setState(prev => ({ ...prev, isLoadingBannerImage: false, isLoadingMaintenanceMode: false })); }
     }, [handleError]);
 
-    const fetchAllData = useCallback(async (userId: string | null) => {
-        Promise.allSettled([
+    const fetchAllData = useCallback(async (user: User | null) => {
+        const isAdminOrEditor = user?.role === 'Admin' || user?.role === 'Editor';
+        const dataPromises = [
             fetchClusters(), fetchEvents(), fetchGrantApplications(), fetchNotifications(),
             fetchUsers(), fetchHolidays(), refreshDashboardPromotions(), fetchVisitorAnalytics(), 
-            fetchFeedback(), fetchClusterAnalytics(), fetchMyItinerary(userId)
-        ]);
-    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics, fetchMyItinerary]);
+            fetchFeedback(), fetchClusterAnalytics(), fetchMyItinerary(user?.id || null), fetchPublicTotalVisits()
+        ];
+        if (isAdminOrEditor) {
+            dataPromises.push(fetchWebsiteTrafficSummary());
+        } else {
+            // Ensure traffic summary is cleared for non-admins
+            setState(prev => ({...prev, websiteTrafficSummary: null, isLoadingWebsiteTraffic: false}));
+        }
+        await Promise.allSettled(dataPromises);
+    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits]);
     
     useEffect(() => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const initializeApp = async () => {
             try {
+                await fetchConfig();
+                const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
-                    const currentUserId = session.user.id;
-                    if (initialAuthCheckCompleted.current && auth.currentUser) {
-                        // This is a session refresh, not a new login. We can do a quick profile check.
-                        const { data: userProfile, error: profileError } = await supabase
-                            .from('users').select('*').eq('id', session.user.id).single();
-                        if (profileError || !userProfile) {
-                            console.error('User profile check failed on refresh, signing out.', profileError);
-                            await api.logoutUser();
-                        } else {
-                            setAuth(prev => ({ ...prev, currentUser: userProfile as User, isAuthenticated: true }));
-                        }
-                        return; // Avoid full re-fetch on simple refresh
-                    }
-    
-                    // This is the initial login or first load with a session.
-                    setAuth(prev => ({ ...prev, isInitializing: true }));
-                    await fetchConfig();
                     const { data: userProfile, error: profileError } = await supabase.from('users').select('*').eq('id', session.user.id).single();
                     if (profileError || !userProfile) {
-                        console.error('User profile fetch failed on initial load, signing out.', profileError);
+                        console.error('Initial user profile fetch failed, signing out.', profileError);
                         await api.logoutUser();
-                        return; // The state will be cleared by the subsequent SIGNED_OUT event.
+                        setAuth(prev => ({ ...prev, currentUser: null, isAuthenticated: false }));
+                        await fetchAllData(null);
+                    } else {
+                        const user = userProfile as User;
+                        setAuth(prev => ({ ...prev, currentUser: user, isAuthenticated: true }));
+                        await fetchAllData(user);
                     }
-                    setAuth({ currentUser: userProfile as User, isAuthenticated: true, isInitializing: false, isLoggingOut: false });
-                    initialAuthCheckCompleted.current = true;
-                    fetchAllData(currentUserId);
                 } else {
-                    // No session, which covers both initial load (no user) and explicit sign-out.
-                    // The previous logic incorrectly re-triggered the initializing state on logout.
-                    // This simplified logic ensures that whenever there's no session, we cleanly
-                    // transition to the guest state without getting stuck.
-                    setAuth({
-                        currentUser: null,
-                        isAuthenticated: false,
-                        isInitializing: false, // Key fix: ensure this is false to show the guest/login view
-                        isLoggingOut: false,   // Ensure this is reset
-                    });
-                    setState(initialDataState); // Reset all data to its initial state for a guest.
-                    initialAuthCheckCompleted.current = false;
-
-                    if (_event === 'SIGNED_OUT') {
-                        showToast("You have been logged out.", "success");
-                    }
-                    
-                    // Fetch public data for the guest view.
-                    fetchConfig();
-                    fetchAllData(null);
+                    setAuth(prev => ({ ...prev, currentUser: null, isAuthenticated: false }));
+                    await fetchAllData(null);
                 }
             } catch (e) {
-                handleError(e, "Error during authentication state change.", true);
-                setAuth({ currentUser: null, isAuthenticated: false, isInitializing: false, isLoggingOut: false });
+                handleError(e, "Error during app initialization", true);
+                setAuth(prev => ({ ...prev, currentUser: null, isAuthenticated: false }));
+            } finally {
+                setAuth(prev => ({ ...prev, isInitializing: false }));
+            }
+        };
+
+        initializeApp();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            // This listener only handles subsequent LOGIN and LOGOUT events, not the initial load.
+            if (_event === 'SIGNED_IN') {
+                const { data: userProfile, error: profileError } = await supabase.from('users').select('*').eq('id', session!.user.id).single();
+                if (profileError || !userProfile) {
+                    console.error('User profile fetch failed on login, signing out.', profileError);
+                    await api.logoutUser();
+                } else {
+                    const user = userProfile as User;
+                    setAuth(prev => ({ ...prev, currentUser: user, isAuthenticated: true, isLoggingOut: false }));
+                    await fetchAllData(user);
+                }
+            } else if (_event === 'SIGNED_OUT') {
+                showToast("You have been logged out.", "success");
+                setAuth({ currentUser: null, isAuthenticated: false, isLoggingOut: false, isInitializing: false });
+                setState(initialDataState); // Reset all data
+                await fetchConfig();
+                await fetchAllData(null); // Re-fetch guest data
             }
         });
+
         return () => { subscription.unsubscribe(); };
-    }, [fetchAllData, fetchConfig, handleError, showToast, auth.currentUser]);
+    }, [fetchAllData, fetchConfig, handleError, showToast]);
 
     useEffect(() => {
         const handleDbChange = (payload: RealtimePostgresChangesPayload<{ [key: string]: any }>) => {
@@ -410,6 +442,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 case 'promotions': refreshDashboardPromotions(); break;
                 case 'app_config': fetchConfig(); break;
                 case 'visitor_analytics': fetchVisitorAnalytics(); break;
+                case 'website_traffic_analytics': 
+                    fetchPublicTotalVisits();
+                    if (auth.currentUser?.role === 'Admin' || auth.currentUser?.role === 'Editor') {
+                        fetchWebsiteTrafficSummary(); 
+                    }
+                    break;
                 case 'cluster_analytics': fetchClusterAnalytics(); break;
                 case 'feedback': fetchFeedback(); break;
                 case 'itinerary_items': fetchMyItinerary(auth.currentUser?.id || null); break;
@@ -417,7 +455,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
         const channel = supabase.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public' }, handleDbChange).subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [auth.currentUser, fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback, fetchMyItinerary]);
+    }, [auth.currentUser, fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits]);
 
     const loginUserWithPassword = useCallback(async (email: string, pass: string) => {
         const { error } = await api.loginUserWithPassword(email, pass);
@@ -644,8 +682,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch(error) { handleError(error, "Transferring cluster ownership"); return false; }
     }, [handleError, showToast, fetchClusters]);
 
-// FIX: The supabase rpc builder is a "thenable" but doesn't have .catch.
-// Changed to an async function to await the result and handle errors properly.
     const incrementClusterView = useCallback(async (clusterId: string) => {
         const { error } = await api.incrementClusterView(clusterId);
         if (error) {
@@ -653,8 +689,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-// FIX: The supabase rpc builder is a "thenable" but doesn't have .catch.
-// Changed to an async function to await the result and handle errors properly.
     const incrementClusterClick = useCallback(async (clusterId: string) => {
         const { error } = await api.incrementClusterClick(clusterId);
         if (error) {
@@ -935,16 +969,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return await api.getDailyClusterAnalytics(clusterId, periodDays);
         } catch(e) { handleError(e, "Fetching daily analytics"); return []; }
     }, [handleError]);
+    
+    const logPageView = useCallback(async (pagePath: string, sessionId: string) => {
+        try {
+            await api.logPageView(pagePath, sessionId);
+        } catch (e) {
+            // Fail silently, this is not critical for the user
+            console.error("Failed to log page view:", e);
+        }
+    }, []);
 
     const getCachedAiInsight = useCallback((viewName: string, filterKey: string) => api.getCachedAiInsight(viewName, filterKey), []);
-    // FIX: The return type of this function did not match the context interface.
-    // Made it an async function that awaits the API call to ensure it returns Promise<void>.
     const setCachedAiInsight = useCallback(async (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => {
-        const { error } = await api.setCachedAiInsight(viewName, filterKey, content, dataLastUpdatedAt);
-        if (error) {
-            handleError(error, "Setting AI Insight Cache");
-        }
-    }, [handleError]);
+        await api.setCachedAiInsight(viewName, filterKey, content, dataLastUpdatedAt);
+    }, []);
     const getLatestEventTimestampForYear = useCallback((year: number) => api.getLatestEventTimestampForYear(year), []);
 
     const addItineraryItem = useCallback(async (itemId: string, itemType: 'cluster' | 'event', itemName: string) => {
@@ -993,7 +1031,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
     }), [
         state, auth, isPhoneView, isPremiumUser,
         loginUserWithPassword, registerUserWithEmailPassword, logoutUser, addGrantApplication, reapplyForGrant, rejectPendingApplication,
@@ -1004,7 +1042,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear,
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear,
         togglePhoneView
     ]);
 

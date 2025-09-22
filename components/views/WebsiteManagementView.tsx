@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
 import Input from '../ui/Input.tsx';
@@ -6,6 +6,65 @@ import { useAppContext } from '../AppContext.tsx';
 import { useToast } from '../ToastContext.tsx';
 import { WebsiteManagementIcon, BellIcon, TrashIcon } from '../../constants.tsx';
 import Spinner from '../ui/Spinner.tsx';
+import { WebsiteTrafficSummary } from '../../types.ts';
+import { ThemeContext } from '../ThemeContext.tsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { EventAnalyticsIcon as SolidChartBarIcon } from '../../constants.tsx';
+
+const WebsiteTrafficCard: React.FC<{ summary: WebsiteTrafficSummary | null; isLoading: boolean; }> = ({ summary, isLoading }) => {
+    const { theme } = useContext(ThemeContext);
+    const chartColors = useMemo(() => {
+        const isDark = theme === 'dark';
+        return {
+            axisStroke: isDark ? '#A0A0A0' : '#566573',
+            gridStroke: isDark ? '#333333' : '#DEE2E6',
+            tooltipBg: isDark ? '#252525' : '#FFFFFF',
+            line: isDark ? '#4DBA87' : '#004925',
+        };
+    }, [theme]);
+    const chartTextStyle = { fill: chartColors.axisStroke, fontSize: 12 };
+
+    if (isLoading) {
+        return (
+            <Card title="Website Traffic (Last 7 Days)" titleIcon={<SolidChartBarIcon className="w-5 h-5" />}>
+                <div className="h-80 flex items-center justify-center"><Spinner /></div>
+            </Card>
+        );
+    }
+    if (!summary) return null;
+
+    const data = summary.daily_trend.map(d => ({...d, date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}));
+    
+    return (
+        <Card title="Website Traffic (Last 7 Days)" titleIcon={<SolidChartBarIcon className="w-5 h-5" />}>
+            <div className="grid grid-cols-3 gap-4 mb-4 text-center">
+                <div>
+                    <p className="text-xs text-brand-text-secondary-light dark:text-brand-text-secondary">Total Visits</p>
+                    <p className="text-xl font-bold">{summary.total_visits.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className="text-xs text-brand-text-secondary-light dark:text-brand-text-secondary">Unique Visitors</p>
+                    <p className="text-xl font-bold">{summary.unique_visitors.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className="text-xs text-brand-text-secondary-light dark:text-brand-text-secondary">Bounce Rate</p>
+                    <p className="text-xl font-bold">{summary.bounce_rate.toFixed(1)}%</p>
+                </div>
+            </div>
+            <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
+                        <XAxis dataKey="date" tick={chartTextStyle} />
+                        <YAxis tick={chartTextStyle} allowDecimals={false} />
+                        <Tooltip contentStyle={{ backgroundColor: chartColors.tooltipBg, border: `1px solid ${chartColors.gridStroke}`, borderRadius: '0.5rem' }} />
+                        <Line type="monotone" dataKey="visits" stroke={chartColors.line} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Visits" />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        </Card>
+    );
+};
 
 const WebsiteManagementView: React.FC = () => {
     const { 
@@ -16,7 +75,9 @@ const WebsiteManagementView: React.FC = () => {
         setSiteBanner,
         sendGlobalPanelNotification,
         notifications,
-        deleteGlobalNotification
+        deleteGlobalNotification,
+        websiteTrafficSummary,
+        isLoadingWebsiteTraffic
     } = useAppContext();
     const { showToast } = useToast();
 
@@ -114,6 +175,8 @@ const WebsiteManagementView: React.FC = () => {
                     Control site-wide settings and communicate with all users.
                 </p>
             </div>
+
+            <WebsiteTrafficCard summary={websiteTrafficSummary} isLoading={isLoadingWebsiteTraffic} />
 
             <Card title="Maintenance Mode" titleIcon={<WebsiteManagementIcon className="w-5 h-5" />}>
                 {isLoadingMaintenanceMode ? (

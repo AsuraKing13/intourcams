@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { ViewName, NavItemType, UserRole, GrantCategory, PrimaryCreativeCategoryDef, NestedNavItemType } from './types.ts';
 import {
@@ -21,6 +22,8 @@ import {
   HomeIcon as SolidHomeIcon,
   DocumentChartBarIcon as SolidDocumentChartBarIcon,
   BuildingLibraryIcon as SolidBuildingLibraryIcon,
+  // FIX: Import GlobeAltIcon to make it available for other components.
+  GlobeAltIcon as SolidGlobeAltIcon,
 } from '@heroicons/react/24/solid';
 
 // =================================================================
@@ -60,6 +63,7 @@ export const MapIcon = SolidMapIcon;
 export const AppMenuIcon = SolidSquares2X2Icon;
 export const DocumentChartBarIcon = SolidDocumentChartBarIcon;
 export const BuildingLibraryIcon = SolidBuildingLibraryIcon;
+export const GlobeAltIcon = SolidGlobeAltIcon;
 export { SolidCalendarDaysIcon as CalendarDaysIcon };
 
 

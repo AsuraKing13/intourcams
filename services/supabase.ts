@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
-import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic, ItineraryItem } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic, ItineraryItem, WebsiteTrafficSummary } from '../types.ts';
 import { parseGrantApplication } from '../utils/parsers.ts';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 // --- Supabase Client ---
 // Use environment variables for Supabase credentials
@@ -96,7 +97,10 @@ export const api = {
     logoutUser: () => supabase.auth.signOut(),
     updateCurrentUserName: (name: string) => supabase.auth.updateUser({ data: { name }}),
     updateCurrentUserPassword: (pass: string) => supabase.auth.updateUser({ password: pass }),
-    deleteCurrentUserAccount: () => supabase.rpc('delete_own_user_account', {}),
+    deleteCurrentUserAccount: async () => {
+        const { error } = await (supabase.rpc as any)('delete_own_user_account', {});
+        if (error) throw error;
+    },
 
     // --- File Storage ---
     async uploadFile(bucket: string, file: File, userId: string, oldFileUrl?: string | null) {
@@ -132,35 +136,35 @@ export const api = {
     },
 
     // --- Grant Applications ---
-    addGrantApplication: (newApplication: TablesInsert<'grant_applications'>) => supabaseClient.from('grant_applications').insert(newApplication),
-    createAdminNotification: (payload: TablesInsert<'notifications'>) => supabaseClient.from('notifications').insert(payload),
-    rejectPendingApplication: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_application', { p_application_id: appId, p_notes: notes }),
-    makeConditionalOffer: (appId: string, notes: string, amount: number) => supabaseClient.rpc('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }),
-    acceptConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }),
-    declineConditionalOffer: (appId: string) => supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }),
-    submitReport: (appId: string, reportFile: any, reportType: 'early' | 'final') => supabaseClient.rpc('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }),
-    approveEarlyReportAndDisburse: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }),
-    rejectEarlyReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_early_report', { p_application_id: appId, p_notes: notes }),
-    rejectFinalReportSubmission: (appId: string, notes: string) => supabaseClient.rpc('admin_reject_final_report', { p_application_id: appId, p_notes: notes }),
-    completeGrantApplication: (appId: string, amount: number, notes: string) => supabaseClient.rpc('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }),
+    addGrantApplication: (newApplication: TablesInsert<'grant_applications'>) => (supabaseClient.from('grant_applications') as any).insert(newApplication),
+    createAdminNotification: (payload: TablesInsert<'notifications'>) => (supabaseClient.from('notifications') as any).insert(payload),
+    rejectPendingApplication: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_application', { p_application_id: appId, p_notes: notes }),
+    makeConditionalOffer: (appId: string, notes: string, amount: number) => (supabaseClient.rpc as any)('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }),
+    acceptConditionalOffer: (appId: string) => (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }),
+    declineConditionalOffer: (appId: string) => (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }),
+    submitReport: (appId: string, reportFile: any, reportType: 'early' | 'final') => (supabaseClient.rpc as any)('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }),
+    approveEarlyReportAndDisburse: (appId: string, amount: number, notes: string) => (supabaseClient.rpc as any)('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }),
+    rejectEarlyReportSubmission: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_early_report', { p_application_id: appId, p_notes: notes }),
+    rejectFinalReportSubmission: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_final_report', { p_application_id: appId, p_notes: notes }),
+    completeGrantApplication: (appId: string, amount: number, notes: string) => (supabaseClient.rpc as any)('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }),
 
     // --- Clusters ---
-    addCluster: (newCluster: TablesInsert<'clusters'>) => supabaseClient.from('clusters').insert(newCluster),
-    addClustersBatch: (payload: TablesInsert<'clusters'>[]) => supabaseClient.from('clusters').insert(payload),
-    updateCluster: (id: string, data: TablesUpdate<'clusters'>) => supabaseClient.from('clusters').update(data).eq('id', id),
+    addCluster: (newCluster: TablesInsert<'clusters'>) => (supabaseClient.from('clusters') as any).insert(newCluster),
+    addClustersBatch: (payload: TablesInsert<'clusters'>[]) => (supabaseClient.from('clusters') as any).insert(payload),
+    updateCluster: (id: string, data: TablesUpdate<'clusters'>) => (supabaseClient.from('clusters') as any).update(data).eq('id', id),
     deleteCluster: (id: string) => supabaseClient.from('clusters').delete().eq('id', id),
-    incrementClusterView: (clusterId: string) => supabaseClient.rpc('increment_cluster_view', { cluster_id_to_increment: clusterId }),
-    incrementClusterClick: (clusterId: string) => supabaseClient.rpc('increment_cluster_click', { cluster_id_to_increment: clusterId }),
-    transferClusterOwnership: (clusterId: string, newOwnerId: string) => supabaseClient.rpc('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }),
+    incrementClusterView: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_view', { cluster_id_to_increment: clusterId }),
+    incrementClusterClick: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_click', { cluster_id_to_increment: clusterId }),
+    transferClusterOwnership: (clusterId: string, newOwnerId: string) => (supabaseClient.rpc as any)('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }),
 
     // --- Cluster Reviews & Products ---
     async fetchReviewsForCluster(clusterId: string): Promise<ClusterReview[]> {
-        const { data, error } = await supabaseClient.rpc('get_reviews_with_usernames', { p_cluster_id: clusterId });
+        const { data, error } = await (supabaseClient.rpc as any)('get_reviews_with_usernames', { p_cluster_id: clusterId });
         if (error) throw error;
-        return data || [];
+        return (data as any) || [];
     },
     async addReviewForCluster(newReview: TablesInsert<'cluster_reviews'>) {
-        const { data, error } = await supabaseClient.from('cluster_reviews').insert(newReview).select().single();
+        const { data, error } = await (supabaseClient.from('cluster_reviews') as any).insert(newReview).select().single();
         if (error) throw error;
         return data;
     },
@@ -169,37 +173,36 @@ export const api = {
         if (error) throw error;
         return data || [];
     },
-    addProduct: (newProduct: TablesInsert<'cluster_products'>) => supabaseClient.from('cluster_products').insert(newProduct),
-    updateProduct: (id: string, data: Partial<AddClusterProductData>) => supabaseClient.from('cluster_products').update(data).eq('id', id),
+    addProduct: (newProduct: TablesInsert<'cluster_products'>) => (supabaseClient.from('cluster_products') as any).insert(newProduct),
+    updateProduct: (id: string, data: Partial<AddClusterProductData>) => (supabaseClient.from('cluster_products') as any).update(data).eq('id', id),
     deleteProduct: (id: string) => supabaseClient.from('cluster_products').delete().eq('id', id),
 
     // --- Events ---
-    addEvent: (newEvent: TablesInsert<'events'>) => supabaseClient.from('events').insert(newEvent),
-    updateEvent: (id: string, data: Partial<AddEventData>) => supabaseClient.from('events').update(data).eq('id', id),
+    addEvent: (newEvent: TablesInsert<'events'>) => (supabaseClient.from('events') as any).insert(newEvent),
+    updateEvent: (id: string, data: Partial<AddEventData>) => (supabaseClient.from('events') as any).update(data).eq('id', id),
     deleteEvent: (id: string) => supabaseClient.from('events').delete().eq('id', id),
 
     // --- Notifications ---
-    markNotificationAsRead: (id: string, payload: TablesUpdate<'notifications'>) => supabaseClient.from('notifications').update(payload).eq('id', id),
-    clearAllNotifications: (notificationIds: string[]) => supabaseClient.rpc('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }),
+    markNotificationAsRead: (id: string, payload: TablesUpdate<'notifications'>) => (supabaseClient.from('notifications') as any).update(payload).eq('id', id),
+    clearAllNotifications: (notificationIds: string[]) => (supabaseClient.rpc as any)('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }),
     deleteGlobalNotification: (id: string) => supabaseClient.from('notifications').delete().eq('id', id),
 
     // --- User Management ---
-    editUser: (id: string, payload: TablesUpdate<'users'>) => supabaseClient.from('users').update(payload).eq('id', id),
+    editUser: (id: string, payload: TablesUpdate<'users'>) => (supabaseClient.from('users') as any).update(payload).eq('id', id),
     
     // --- Feedback ---
-    addFeedback: (payload: TablesInsert<'feedback'>) => supabaseClient.from('feedback').insert(payload),
-    updateFeedbackStatus: (id: string, status: FeedbackStatus) => supabaseClient.from('feedback').update({ status }).eq('id', id),
+    addFeedback: (payload: TablesInsert<'feedback'>) => (supabaseClient.from('feedback') as any).insert(payload),
+    updateFeedbackStatus: (id: string, status: FeedbackStatus) => (supabaseClient.rpc as any)('update_feedback_status', { p_id: id, p_status: status }),
     
     // --- Promotions ---
-    addPromotion: (payload: TablesInsert<'promotions'>) => supabaseClient.from('promotions').insert(payload),
-    updatePromotion: (id: number, payload: TablesUpdate<'promotions'>) => supabaseClient.from('promotions').update(payload).eq('id', id),
+    addPromotion: (payload: TablesInsert<'promotions'>) => (supabaseClient.from('promotions') as any).insert(payload),
+    updatePromotion: (id: number, payload: TablesUpdate<'promotions'>) => (supabaseClient.from('promotions') as any).update(payload).eq('id', id),
     deletePromotion: (id: number) => supabaseClient.from('promotions').delete().eq('id', id),
 
     // --- Website Management ---
-    updateAppConfig: (payload: TablesUpdate<'app_config'>, key: string) => supabaseClient.from('app_config').update(payload).eq('key', key),
-    upsertAppConfig: (payload: TablesInsert<'app_config'>) => supabaseClient.from('app_config').upsert(payload),
+    updateAppConfig: (payload: TablesUpdate<'app_config'>, key: string) => (supabaseClient.from('app_config') as any).update(payload).eq('key', key),
+    upsertAppConfig: (payload: TablesInsert<'app_config'>) => (supabaseClient.from('app_config') as any).upsert(payload),
     setSiteBanner: async (message: string, expires_at: string | null) => {
-        // This is a multi-step operation, so it's kept as a single function
         const { data: bannersToDelete, error: fetchError } = await supabaseClient.from('notifications').select('id').eq('recipient_id', 'global_banner');
         if (fetchError) throw fetchError;
         if (bannersToDelete && bannersToDelete.length > 0) {
@@ -211,14 +214,29 @@ export const api = {
             id: crypto.randomUUID(), recipient_id: 'global_banner', message, 
             type: 'status_change', timestamp: new Date().toISOString(), expires_at 
         };
-        await supabaseClient.from('notifications').insert(newBanner);
+        await (supabaseClient.from('notifications') as any).insert(newBanner);
     },
-    sendGlobalPanelNotification: (message: string) => supabaseClient.rpc('send_notification_to_all_users', { p_message: message }),
+    sendGlobalPanelNotification: (message: string) => (supabaseClient.rpc as any)('send_notification_to_all_users', { p_message: message }),
 
     // --- Analytics ---
-    uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => supabaseClient.rpc('upload_visitor_analytics_batch', { p_data: data as unknown as Json }),
+    uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => (supabaseClient.rpc as any)('upload_visitor_analytics_batch', { p_data: data as unknown as Json }),
+    logPageView: (pagePath: string, sessionId: string) => (supabaseClient.rpc as any)('log_page_view', { p_page_path: pagePath, p_session_id: sessionId }),
+    async getWebsiteTrafficSummary(periodDays: number): Promise<WebsiteTrafficSummary> {
+        const { data, error } = await (supabaseClient.rpc as any)('get_website_traffic_summary', { p_period_days: periodDays });
+        if (error) throw error;
+        return data as unknown as WebsiteTrafficSummary;
+    },
+    async getPublicTotalVisits(): Promise<number | null> {
+        // FIX: RPC calls for functions with no arguments require passing an empty object `{}` to prevent schema cache errors.
+        const { data, error } = await (supabaseClient.rpc as any)('get_public_total_visits', {});
+        if (error) {
+            console.error("Error fetching public total visits:", error);
+            throw error;
+        }
+        return data;
+    },
     async getDailyClusterAnalytics(clusterId: string, periodDays: number) {
-        const { data, error } = await supabaseClient.rpc('get_daily_cluster_analytics', { p_cluster_id: clusterId, p_period_days: periodDays });
+        const { data, error } = await (supabaseClient.rpc as any)('get_daily_cluster_analytics', { p_cluster_id: clusterId, p_period_days: periodDays });
         if (error) throw error;
         return data || [];
     },
@@ -229,7 +247,7 @@ export const api = {
         if (error && error.code !== 'PGRST116') throw error; // Ignore "not found" errors
         return data;
     },
-    setCachedAiInsight: (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => supabaseClient.from('ai_insights').upsert(
+    setCachedAiInsight: (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => (supabaseClient.from('ai_insights') as any).upsert(
         { view_name: viewName, filter_key: filterKey, content, data_last_updated_at: dataLastUpdatedAt },
         { onConflict: 'view_name,filter_key' }
     ),
@@ -243,20 +261,27 @@ export const api = {
 
     // --- Itinerary ---
     async findOrCreateItinerary(userId: string): Promise<string> {
-        const { data, error } = await supabaseClient.from('itineraries').select('id').eq('user_id', userId).limit(1).single();
+        const { data, error }: { data: { id: string } | null; error: PostgrestError | null } = await supabaseClient.from('itineraries').select('id').eq('user_id', userId).limit(1).single();
         if (error && error.code !== 'PGRST116') throw error;
         if (data) return data.id;
         
-        const { data: newData, error: createError } = await supabaseClient.from('itineraries').insert({ user_id: userId, name: "My Sarawak Trip" }).select('id').single();
-        if (createError || !newData) throw createError || new Error("Failed to create itinerary.");
+        // FIX: Removed 'as any' to allow proper type inference for the insert operation's result.
+        // The 'as any' was causing `newData` to be inferred as `never`, leading to a compile-time error.
+        const { data: newData, error: insertError } = await supabaseClient.from('itineraries').insert({ user_id: userId, name: "My Itinerary" }).select().single();
+        if (insertError) throw insertError;
+        if (!newData) throw new Error("Itinerary creation failed: no data returned.");
         return newData.id;
     },
     async fetchMyItineraryItems(itineraryId: string): Promise<ItineraryItem[]> {
-        const { data, error } = await supabaseClient.from('itinerary_items').select('*').eq('itinerary_id', itineraryId).order('added_at', { ascending: true });
+        const { data, error } = await supabaseClient
+            .from('itinerary_items')
+            .select('*')
+            .eq('itinerary_id', itineraryId)
+            .order('added_at', { ascending: true });
         if (error) throw error;
-        return data || [];
+        return (data as ItineraryItem[]) || [];
     },
-    addItineraryItem: (newItem: TablesInsert<'itinerary_items'>) => supabaseClient.from('itinerary_items').upsert(newItem, { onConflict: 'itinerary_id,item_id' }),
+    addItineraryItem: (item: TablesInsert<'itinerary_items'>) => (supabaseClient.from('itinerary_items') as any).insert(item),
     removeItineraryItem: (itemId: string) => supabaseClient.from('itinerary_items').delete().eq('id', itemId),
     clearMyItinerary: (itineraryId: string) => supabaseClient.from('itinerary_items').delete().eq('itinerary_id', itineraryId),
 };

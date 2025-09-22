@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useContext } from 'react';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
 import { 
@@ -10,6 +10,7 @@ import {
     EventsCalendarIcon,
     PlusIcon,
     SearchIcon,
+    GlobeAltIcon,
 } from '../../constants.tsx';
 import Input from '../ui/Input.tsx';
 import { ViewName, GrantApplication, Cluster, AppEvent } from '../../types.ts';
@@ -41,34 +42,17 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, percentage, icon, det
         {icon}
       </div>
     </div>
-    <button 
-        onClick={onDetailsClick} 
-        className="text-sm text-brand-green-text dark:text-brand-dark-green-text hover:underline mt-4 cursor-pointer"
-        aria-label={`${detailsLabel} for ${title}`}
-    >
-        {detailsLabel}
-    </button>
+    {onDetailsClick && (
+      <button 
+          onClick={onDetailsClick} 
+          className="text-sm text-brand-green-text dark:text-brand-dark-green-text hover:underline mt-4 cursor-pointer"
+          aria-label={`${detailsLabel} for ${title}`}
+      >
+          {detailsLabel}
+      </button>
+    )}
   </Card>
 );
-
-const getStatusBadgeClasses = (status: GrantApplication['status']) => {
-    switch (status) {
-      case 'Approved':
-      case 'Complete':
-      case 'Early Report Submitted':
-      case 'Final Report Submitted':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'Rejected': 
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'Pending':
-      case 'Conditional Offer':
-      case 'Early Report Required':
-      case 'Final Report Required':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      default: 
-        return 'bg-neutral-200 text-neutral-800 dark:bg-neutral-600 dark:text-neutral-200';
-    }
-};
 
 // A valid 1x1 transparent GIF, replacing the corrupted base64 string.
 const SAGO_PALM_IMAGE_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -81,7 +65,7 @@ interface DashboardViewProps {
 }
 
 const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthRequired }) => {
-  const { grantApplications, clusters: allClusters, events: allEvents, currentUser, promotions, isLoadingPromotions, refreshDashboardPromotions, bannerImageUrl, isLoadingBannerImage, bannerOverlayOpacity } = useAppContext();
+  const { grantApplications, clusters: allClusters, events: allEvents, currentUser, promotions, isLoadingPromotions, refreshDashboardPromotions, bannerImageUrl, isLoadingBannerImage, bannerOverlayOpacity, visitorAnalyticsData, isLoadingVisitorAnalytics } = useAppContext();
   const [isManagePromosOpen, setIsManagePromosOpen] = useState(false);
   const [globalSearchTerm, setGlobalSearchTerm] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
@@ -97,6 +81,13 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
   const isGuest = !currentUser;
   const canManagePromos = currentUser?.role === 'Admin' || currentUser?.role === 'Editor';
   const isAdminOrEditor = canManagePromos;
+  
+  const totalArrivalsThisYear = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return visitorAnalyticsData
+        .filter(d => d.year === currentYear)
+        .reduce((sum, item) => sum + item.count, 0);
+  }, [visitorAnalyticsData]);
 
   const pendingApplicationsCount = grantApplications.filter(app => app.status === 'Pending').length;
   const activeClustersCount = allClusters.length;
@@ -229,6 +220,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
     setIsSearchResultsModalOpen(false); // Close modal on navigation
   };
 
+  const formatLargeNumber = (num: number) => {
+      if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+      if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+      return num.toString();
+  };
+
   return (
     <>
       {isLoadingBannerImage ? (
@@ -288,7 +285,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            {/* Column 1: Promotions */}
             <div>
                 {isLoadingPromotions ? (
                   <div className="h-80 flex items-center justify-center bg-neutral-200-light dark:bg-neutral-800-dark/50 rounded-lg">
@@ -300,31 +296,18 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
                 ) : (
                   <div className="h-80 flex flex-col items-center justify-center bg-neutral-100-light dark:bg-neutral-800-dark/50 rounded-lg border-2 border-dashed border-neutral-300-light dark:border-neutral-700-dark text-center p-4">
                     <h3 className="text-lg font-semibold text-brand-text-light dark:text-brand-text">No Active Promotions</h3>
-                    {canManagePromos ? (
-                      <>
-                        <p className="mt-1 text-sm text-brand-text-secondary-light dark:text-brand-text-secondary max-w-sm">
-                          Click the button below to add a new promotional slide to the dashboard carousel.
-                        </p>
-                        <Button variant="primary" size="sm" className="mt-4" onClick={() => setIsManagePromosOpen(true)} leftIcon={<PlusIcon className="w-4 h-4" />}>
-                          Add a Promotion
-                        </Button>
-                      </>
-                    ) : (
                       <p className="mt-1 text-sm text-brand-text-secondary-light dark:text-brand-text-secondary">
                         Check back later for featured content and announcements.
                       </p>
-                    )}
                   </div>
                 )}
             </div>
 
-            {/* Column 2: Statistics */}
             <div className="grid grid-cols-2 gap-2 sm:gap-6">
                 <StatCard 
-                    title="Total Visitors" 
-                    value="1.2M+" 
-                    percentage="+15%" 
-                    icon={<UsersIcon className="w-6 h-6"/>} 
+                    title="Tourism Arrivals (This Year)" 
+                    value={isLoadingVisitorAnalytics ? '...' : formatLargeNumber(totalArrivalsThisYear)}
+                    icon={<GlobeAltIcon className="w-6 h-6"/>} 
                     onDetailsClick={() => handleNavigation(ViewName.TourismStatistics, false)}
                 />
                 <StatCard 
@@ -390,7 +373,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ setCurrentView, onAuthReq
                               <div key={app.id} className="p-3 rounded-md bg-neutral-100-light dark:bg-neutral-800-dark/50">
                                   <div className="flex justify-between items-start gap-2">
                                       <p className="font-semibold text-brand-text-light dark:text-brand-text truncate pr-2" title={app.project_name}>{app.project_name}</p>
-                                      <span className={`text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap ${getStatusBadgeClasses(app.status)}`}>{app.status}</span>
+                                      <span className={`text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap`}>{app.status}</span>
                                   </div>
                                   <p className="text-xs text-brand-text-secondary-light dark:text-brand-text-secondary mt-1">
                                       Last updated: {new Date(app.last_update_timestamp).toLocaleDateString()}

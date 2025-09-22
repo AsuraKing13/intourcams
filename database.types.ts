@@ -566,6 +566,29 @@ export interface Database {
           year?: number
         }
       }
+      website_traffic_analytics: {
+        Row: {
+          id: number
+          created_at: string
+          page_path: string | null
+          user_id: string | null
+          session_id: string
+        }
+        Insert: {
+          id?: number
+          created_at?: string
+          page_path?: string | null
+          user_id?: string | null
+          session_id: string
+        }
+        Update: {
+          id?: number
+          created_at?: string
+          page_path?: string | null
+          user_id?: string | null
+          session_id?: string
+        }
+      }
     }
     Views: {}
     Functions: {
@@ -636,6 +659,10 @@ export interface Database {
           clicks: number
         }[]
       }
+      get_public_total_visits: {
+        Args: Record<string, never>
+        Returns: number
+      }
       get_reviews_with_usernames: {
         Args: {
           p_cluster_id: string
@@ -649,6 +676,12 @@ export interface Database {
           comment: string | null
           created_at: string
         }[]
+      }
+      get_website_traffic_summary: {
+        Args: {
+          p_period_days: number
+        }
+        Returns: Json
       }
       handle_grant_offer_response: {
         Args: {
@@ -666,6 +699,13 @@ export interface Database {
       increment_cluster_view: {
         Args: {
           cluster_id_to_increment: string
+        }
+        Returns: undefined
+      }
+      log_page_view: {
+        Args: {
+          p_page_path: string
+          p_session_id: string
         }
         Returns: undefined
       }

@@ -53,6 +53,14 @@ export type VisitorAnalyticsData = {
   count: number;
 };
 
+/** Data shape for the new website traffic summary. */
+export interface WebsiteTrafficSummary {
+  total_visits: number;
+  unique_visitors: number;
+  bounce_rate: number;
+  daily_trend: { date: string; visits: number }[];
+}
+
 
 // =================================================================
 // --- CORE DATA MODELS (Derived from Supabase Table Rows) ---
