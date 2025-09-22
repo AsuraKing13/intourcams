@@ -341,6 +341,10 @@ const Header: React.FC<HeaderProps> = ({ currentView, setCurrentView, isGuest = 
             setIsMobileMenuOpen(false);
             onSwitchToLogin?.();
           }}
+          onRegister={() => {
+            setIsMobileMenuOpen(false);
+            onRegister?.();
+          }}
         />
       ) : (
         <Sidebar

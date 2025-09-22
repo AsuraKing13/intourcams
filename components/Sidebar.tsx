@@ -1,7 +1,7 @@
 
 import React, { useContext, useMemo } from 'react';
 import { ViewName, NavItemType } from '../types.ts';
-import { NAV_ITEMS, GUEST_NAV_ITEMS, LogoIcon, MoonIcon, SunIcon, LoginIcon, XMarkIcon } from '../constants.tsx';
+import { NAV_ITEMS, GUEST_NAV_ITEMS, LogoIcon, MoonIcon, SunIcon, LoginIcon, XMarkIcon, UserPlusIcon } from '../constants.tsx';
 import { ThemeContext } from './ThemeContext.tsx';
 import Button from './ui/Button.tsx';
 import { useAppContext } from './AppContext.tsx'; 
@@ -11,6 +11,7 @@ interface SidebarProps {
   setCurrentView: (view: ViewName) => void;
   isGuest?: boolean;
   onSwitchToLogin?: () => void;
+  onRegister?: () => void;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -24,7 +25,7 @@ const VIEW_ACCESS_RULES: { [key in ViewName]?: string[] } = {
   [ViewName.SystemFeedback]: ['admin', 'editor'],
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isGuest = false, onSwitchToLogin, isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isGuest = false, onSwitchToLogin, onRegister, isOpen, onClose }) => {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const { currentUser } = useAppContext(); 
 
@@ -61,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isGuest 
 
       {/* Sidebar Content */}
       <aside 
-        className={`fixed top-0 left-0 h-full w-72 bg-sidebar-bg-light dark:bg-sidebar-bg text-brand-text-secondary-light dark:text-brand-text-secondary shadow-lg z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 right-0 h-full w-72 bg-sidebar-bg-light dark:bg-sidebar-bg text-brand-text-secondary-light dark:text-brand-text-secondary shadow-lg z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sidebar-title"
@@ -96,18 +97,32 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, isGuest 
               ))}
             </nav>
             <div className={`p-4 border-t border-neutral-300-light dark:border-neutral-700-dark`}>
-              {isGuest && onSwitchToLogin && (
-                  <div className='mb-4'>
-                      <Button 
-                          variant="primary" 
-                          size="md" 
-                          onClick={onSwitchToLogin} 
-                          leftIcon={<LoginIcon className="w-5 h-5"/>}
-                          className="w-full"
-                          title="Admin & User Login"
-                      >
-                          Admin & User Login
-                      </Button>
+              {isGuest && (
+                  <div className='mb-4 space-y-3'>
+                      {onSwitchToLogin && (
+                        <Button 
+                            variant="primary" 
+                            size="md" 
+                            onClick={onSwitchToLogin} 
+                            leftIcon={<LoginIcon className="w-5 h-5"/>}
+                            className="w-full"
+                            title="Admin & User Login"
+                        >
+                            Login
+                        </Button>
+                      )}
+                      {onRegister && (
+                        <Button 
+                            variant="secondary" 
+                            size="md" 
+                            onClick={onRegister} 
+                            leftIcon={<UserPlusIcon className="w-5 h-5"/>}
+                            className="w-full"
+                            title="Create a New Account"
+                        >
+                            Register
+                        </Button>
+                      )}
                   </div>
               )}
               <div className="flex flex-col space-y-2">
