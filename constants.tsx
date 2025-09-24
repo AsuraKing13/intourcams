@@ -71,30 +71,7 @@ export { SolidCalendarDaysIcon as CalendarDaysIcon };
 // --- CUSTOM SVG ICONS ---
 // =================================================================
 export const LogoIcon: React.FC<{ className?: string }> = ({ className = "h-16 w-auto" }) => (
-    <svg viewBox="0 0 110 110" className={className} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-        <defs><clipPath id="globe-clip-for-logo"><circle cx="50" cy="50" r="38"/></clipPath></defs>
-        <g transform="translate(5, 5)">
-            <path d="M 12,62 A 45 45 0 0 1 88,62 A 50 50 0 0 0 12,62 Z" fill="#981b1e" />
-            <path d="M 12,38 A 45 45 0 0 0 88,38 A 50 50 0 0 1 12,38 Z" fill="#fcc500" />
-            <g clipPath="url(#globe-clip-for-logo)">
-                <circle cx="50" cy="50" r="38" fill="#b9935a"/>
-                <g id="network" fill="#e4c89a" stroke="#e4c89a" strokeWidth="1.5">
-                    <line x1="50" y1="28" x2="35" y2="38" /><line x1="50" y1="28" x2="65" y2="38" />
-                    <line x1="35" y1="38" x2="25" y2="50" /><line x1="35" y1="38" x2="50" y2="50" />
-                    <line x1="65" y1="38" x2="50" y2="50" /><line x1="65" y1="38" x2="75" y2="50" />
-                    <line x1="65" y1="38" x2="80" y2="45" /><line x1="25" y1="50" x2="35" y2="62" />
-                    <line x1="50" y1="50" x2="35" y2="62" /><line x1="50" y1="50" x2="65" y2="62" />
-                    <line x1="75" y1="50" x2="65" y2="62" /><line x1="75" y1="50" x2="80" y2="58" />
-                    <line x1="35" y1="62" x2="50" y2="72" /><line x1="65" y1="62" x2="50" y2="72" />
-                    <line x1="35" y1="38" x2="45" y2="50" /><line x1="45" y1="50" x2="50" y2="50" /><line x1="45" y1="50" x2="35" y2="62" />
-                    <circle cx="50" cy="28" r="4" /><circle cx="35" cy="38" r="4" /><circle cx="65" cy="38" r="4" />
-                    <circle cx="25" cy="50" r="4" /><circle cx="50" cy="50" r="5" /><circle cx="75" cy="50" r="4" />
-                    <circle cx="45" cy="50" r="3" /><circle cx="35" cy="62" r="4" /><circle cx="65" cy="62" r="4" />
-                    <circle cx="50" cy="72" r="4" /><circle cx="80" cy="45" r="3" /><circle cx="80" y2="58" r="3" />
-                </g>
-            </g>
-        </g>
-    </svg>
+    <img src="/public/INTOURCAMS LOGO.png" alt="INTOURCAMS Logo" className={className} />
 );
 
 // --- NAVIGATION ICONS ---
