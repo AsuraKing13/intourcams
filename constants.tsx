@@ -71,58 +71,11 @@ export { SolidCalendarDaysIcon as CalendarDaysIcon };
 // --- CUSTOM SVG ICONS ---
 // =================================================================
 export const LogoIcon: React.FC<{ className?: string }> = ({ className = "h-16 w-auto" }) => (
-    <svg className={className} viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
-        {/* Yellow outer ring */}
-        <circle cx="400" cy="400" r="380" fill="#FFD700" />
-        {/* White middle ring */}
-        <circle cx="400" cy="400" r="320" fill="white" />
-        {/* Black accent arc */}
-        <path d="M 400 80 A 320 320 0 0 1 720 400 A 320 320 0 0 1 400 720" fill="black" />
-        {/* Red accent arc */}
-        <path d="M 400 720 A 320 320 0 0 1 80 400 A 320 320 0 0 1 400 80" fill="#DC2626" />
-        {/* Network pattern */}
-        <g fill="black" stroke="black" strokeWidth="3">
-            {/* Central hub */}
-            <circle cx="400" cy="400" r="15" />
-            {/* Inner ring nodes */}
-            <circle cx="400" cy="300" r="8" />
-            <circle cx="470" cy="330" r="8" />
-            <circle cx="470" cy="470" r="8" />
-            <circle cx="400" cy="500" r="8" />
-            <circle cx="330" cy="470" r="8" />
-            <circle cx="330" cy="330" r="8" />
-            {/* Outer ring nodes */}
-            <circle cx="400" cy="220" r="8" />
-            <circle cx="520" cy="280" r="8" />
-            <circle cx="580" cy="400" r="8" />
-            <circle cx="520" cy="520" r="8" />
-            <circle cx="400" cy="580" r="8" />
-            <circle cx="280" cy="520" r="8" />
-            <circle cx="220" cy="400" r="8" />
-            <circle cx="280" cy="280" r="8" />
-            {/* Connections */}
-            <line x1="400" y1="400" x2="400" y2="300" />
-            <line x1="400" y1="400" x2="470" y2="330" />
-            <line x1="400" y1="400" x2="470" y2="470" />
-            <line x1="400" y1="400" x2="400" y2="500" />
-            <line x1="400" y1="400" x2="330" y2="470" />
-            <line x1="400" y1="400" x2="330" y2="330" />
-            {/* Outer connections */}
-            <line x1="400" y1="300" x2="400" y2="220" />
-            <line x1="470" y1="330" x2="520" y2="280" />
-            <line x1="470" y1="470" x2="520" y2="520" />
-            <line x1="400" y1="500" x2="400" y2="580" />
-            <line x1="330" y1="470" x2="280" y2="520" />
-            <line x1="330" y1="330" x2="280" y2="280" />
-            {/* Cross connections */}
-            <line x1="400" y1="300" x2="470" y2="330" />
-            <line x1="470" y1="330" x2="470" y2="470" />
-            <line x1="470" y1="470" x2="400" y2="500" />
-            <line x1="400" y1="500" x2="330" y2="470" />
-            <line x1="330" y1="470" x2="330" y2="330" />
-            <line x1="330" y1="330" x2="400" y2="300" />
-        </g>
-    </svg>
+    <img 
+        src="https://rxwcwwyjgfehldjaxxfj.supabase.co/storage/v1/object/public/logos/logo%20INTOURCAMS.png" 
+        alt="INTOURCAMS Logo" 
+        className={className}
+    />
 );
 
 // --- NAVIGATION ICONS ---
