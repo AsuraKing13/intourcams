@@ -3,20 +3,26 @@ import VisitorAnalyticsView from './VisitorAnalyticsView.tsx';
 import EventAnalyticsView from './EventAnalyticsView.tsx';
 import ROIStatisticsView from './ROIStatisticsView.tsx';
 import ClusterAnalyticsView from './ClusterAnalyticsView.tsx'; // Import the new view
+import GrantAnalyticsView from './GrantAnalyticsView.tsx'; // Import the new grant view
 import { useAppContext } from '../AppContext.tsx';
 import { LockClosedIcon } from '@heroicons/react/24/solid';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
 
-type AnalyticsTab = 'visitor' | 'event' | 'cluster' | 'roi'; // Add 'cluster' tab
+type AnalyticsTab = 'visitor' | 'event' | 'cluster' | 'roi' | 'grant';
 
 const TourismStatisticsView: React.FC = () => {
-    const { isPremiumUser } = useAppContext();
+    const { isPremiumUser, currentUser } = useAppContext();
     const [activeTab, setActiveTab] = useState<AnalyticsTab>('visitor');
+
+    const isAdminOrEditor = currentUser?.role === 'Admin' || currentUser?.role === 'Editor';
 
     const handleTabClick = (tabName: AnalyticsTab) => {
         // Prevent clicking locked tabs
         if ((tabName === 'roi' || tabName === 'cluster') && !isPremiumUser) {
+            return;
+        }
+        if (tabName === 'grant' && !isAdminOrEditor) {
             return;
         }
         setActiveTab(tabName);
@@ -28,11 +34,13 @@ const TourismStatisticsView: React.FC = () => {
                 return <VisitorAnalyticsView />;
             case 'event':
                 return <EventAnalyticsView />;
+            case 'grant':
+                return isAdminOrEditor ? <GrantAnalyticsView /> : null;
             case 'cluster':
                 if (isPremiumUser) {
                     return <ClusterAnalyticsView />;
                 }
-                // Fallthrough to locked view if not premium
+            // Fallthrough to locked view if not premium
             case 'roi':
                 if (isPremiumUser) {
                     return <ROIStatisticsView />;
@@ -62,6 +70,9 @@ const TourismStatisticsView: React.FC = () => {
         if ((tabName === 'roi' || tabName === 'cluster') && !isPremiumUser) {
             return `${baseClasses} text-neutral-400 dark:text-neutral-500 cursor-not-allowed`;
         }
+        if (tabName === 'grant' && !isAdminOrEditor) {
+            return `${baseClasses} text-neutral-400 dark:text-neutral-500 cursor-not-allowed`;
+        }
         return `${baseClasses} text-brand-text-secondary-light dark:text-brand-text-secondary hover:bg-neutral-200-light dark:hover:bg-neutral-800-dark`;
     };
 
@@ -82,6 +93,11 @@ const TourismStatisticsView: React.FC = () => {
                     <button onClick={() => handleTabClick('event')} className={getTabClass('event')}>
                         Event Analytics
                     </button>
+                    {isAdminOrEditor && (
+                         <button onClick={() => handleTabClick('grant')} className={getTabClass('grant')}>
+                            Grant Statistics
+                        </button>
+                    )}
                     <button onClick={() => handleTabClick('cluster')} className={getTabClass('cluster')} disabled={!isPremiumUser && activeTab !== 'cluster'}>
                         Trends Analytics
                         {!isPremiumUser && <LockClosedIcon className="w-4 h-4 text-yellow-500" />}

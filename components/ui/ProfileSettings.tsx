@@ -44,14 +44,34 @@ const ProfileSettings: React.FC = () => {
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Stronger password validation
+    if (newPassword.length < 8) {
+      showToast("Password must be at least 8 characters long.", 'error');
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      showToast("Password must contain at least one uppercase letter.", 'error');
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      showToast("Password must contain at least one lowercase letter.", 'error');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      showToast("Password must contain at least one number.", 'error');
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
+      showToast("Password must contain at least one special character.", 'error');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       showToast('New passwords do not match.', 'error');
       return;
     }
-    if (newPassword.length < 6) {
-      showToast('Password must be at least 6 characters long.', 'error');
-      return;
-    }
+
     setIsPasswordSubmitting(true);
     try {
       await updateCurrentUserPassword(newPassword);
@@ -132,15 +152,20 @@ const ProfileSettings: React.FC = () => {
 
       <Card title="Security" titleIcon={<ShieldCheckIcon className="w-6 h-6" />}>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
-          <Input
-            label="New Password"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            placeholder="Enter new password (min. 6 characters)"
-            disabled={isPasswordSubmitting}
-          />
+          <div>
+            <Input
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              placeholder="Enter new password"
+              disabled={isPasswordSubmitting}
+            />
+             <p className="text-xs text-brand-text-secondary-light dark:text-brand-text-secondary mt-1">
+                Must be at least 8 characters and include uppercase, lowercase, number, and special characters.
+            </p>
+          </div>
           <Input
             label="Confirm New Password"
             type="password"

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { ViewName, ItineraryItem } from '../../types.ts';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ViewName, ItineraryItem, Cluster } from '../../types.ts';
 import { useAppContext } from '../AppContext.tsx';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
@@ -7,6 +7,7 @@ import Input from '../ui/Input.tsx';
 import Spinner from '../ui/Spinner.tsx';
 import { SparklesIcon, TourismClusterIcon, EventsCalendarIcon, PlusIcon, MapPinIcon, TrashIcon } from '../../constants.tsx';
 import { generateItineraryRecommendations } from '../../services/gemini.ts';
+import ClusterDetailModal from '../ui/ClusterDetailModal.tsx';
 
 interface AIPlannerViewProps {
   setCurrentView: (view: ViewName) => void;
@@ -94,7 +95,33 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [addingItemId, setAddingItemId] = useState<string | null>(null);
+    const [viewingCluster, setViewingCluster] = useState<Cluster | null>(null);
     
+    useEffect(() => {
+        try {
+            const savedStateJSON = sessionStorage.getItem('aiPlannerState');
+            if (savedStateJSON) {
+                sessionStorage.removeItem('aiPlannerState'); // Clear it immediately
+                const savedState = JSON.parse(savedStateJSON);
+
+                if (savedState.preferences) {
+                    // Convert activities array back to a Set
+                    savedState.preferences.activities = new Set(savedState.preferences.activities || []);
+                    setPreferences(savedState.preferences);
+                }
+                if (savedState.recommendations) {
+                    setRecommendations(savedState.recommendations);
+                }
+                if (savedState.error) {
+                    setError(savedState.error);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to restore AI Planner state from session storage", e);
+            sessionStorage.removeItem('aiPlannerState');
+        }
+    }, []); // Empty dependency array ensures it runs only on mount.
+
     const handleActivityToggle = (activity: string) => {
         setPreferences(prev => {
             const newActivities = new Set(prev.activities);
@@ -118,7 +145,9 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
 
             const relevantClusters = clusters.filter(c => {
                 const matchesLocation = !locationLower || (c.display_address || c.location).toLowerCase().includes(locationLower);
-                const matchesActivity = selectedActivities.length === 0 || c.category.some(cat => selectedActivities.includes(cat.toLowerCase()));
+                // FIX: Add a type guard to ensure `cat` is a string before calling `toLowerCase`.
+                // This resolves a TypeScript error where `cat` was being inferred as `unknown`.
+                const matchesActivity = selectedActivities.length === 0 || c.category.some(cat => typeof cat === 'string' && selectedActivities.includes(cat.toLowerCase()));
                 return matchesLocation && matchesActivity;
             });
 
@@ -155,8 +184,14 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
 
     const handleViewDetails = (item: Recommendation) => {
         if (item.type === 'cluster') {
-            sessionStorage.setItem('initialClusterSearch', item.name);
-            setCurrentView(ViewName.TourismCluster);
+            const fullCluster = clusters.find(c => c.id === item.id);
+            if (fullCluster) {
+                setViewingCluster(fullCluster);
+            } else {
+                // Fallback for safety if cluster data somehow isn't available
+                sessionStorage.setItem('initialClusterSearch', item.name);
+                setCurrentView(ViewName.TourismCluster);
+            }
         } else {
             sessionStorage.setItem('initialEventSearch', item.name);
             setCurrentView(ViewName.EventsCalendar);
@@ -165,6 +200,16 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
     
     const handleAddToItinerary = async (item: Recommendation) => {
         if (!currentUser) {
+            // Save state before prompting login
+            const stateToSave = {
+                preferences: {
+                    ...preferences,
+                    activities: Array.from(preferences.activities), // Convert Set to Array for JSON
+                },
+                recommendations,
+                error,
+            };
+            sessionStorage.setItem('aiPlannerState', JSON.stringify(stateToSave));
             onAuthRequired?.("Please log in or register to save items to your itinerary.");
             return;
         }
@@ -287,7 +332,6 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
                                           onClick={() => handleAddToItinerary(rec)} 
                                           leftIcon={<PlusIcon className="w-5 h-5"/>}
                                           isLoading={addingItemId === rec.id}
-                                          disabled={!currentUser}
                                         >
                                             Add to Itinerary
                                         </Button>
@@ -301,6 +345,13 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
             <div className="lg:col-span-1">
                 <MyItinerary />
             </div>
+            {viewingCluster && (
+                <ClusterDetailModal
+                    cluster={viewingCluster}
+                    onClose={() => setViewingCluster(null)}
+                    showAdminControls={false}
+                />
+            )}
         </div>
     );
 };

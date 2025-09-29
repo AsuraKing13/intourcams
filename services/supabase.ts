@@ -14,7 +14,11 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error("Supabase URL and Anon Key must be provided in environment variables.");
 }
 
-const supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    db: {
+        schema: 'public',
+    },
+});
 
 
 // Export client for auth listeners
@@ -163,9 +167,11 @@ export const api = {
         if (error) throw error;
         return (data as any) || [];
     },
-    async addReviewForCluster(newReview: TablesInsert<'cluster_reviews'>) {
+    // FIX: Restructured the call to destructure data and error, and cast the `from` call to `any` to bypass faulty type inference on the `insert` method. This resolves the 'never' type error.
+    async addReviewForCluster(newReview: TablesInsert<'cluster_reviews'>): Promise<Tables<'cluster_reviews'>> {
         const { data, error } = await (supabaseClient.from('cluster_reviews') as any).insert(newReview).select().single();
         if (error) throw error;
+        if (!data) throw new Error('Review submission failed, no data returned.');
         return data;
     },
     async fetchProductsForCluster(clusterId: string): Promise<ClusterProduct[]> {
@@ -227,8 +233,8 @@ export const api = {
         return data as unknown as WebsiteTrafficSummary;
     },
     async getPublicTotalVisits(): Promise<number | null> {
-        // FIX: RPC calls for functions with no arguments require passing an empty object `{}` to prevent schema cache errors.
-        const { data, error } = await (supabaseClient.rpc as any)('get_public_total_visits', {});
+        // FIX: Corrected RPC call for functions with no arguments.
+        const { data, error } = await supabaseClient.rpc('get_public_total_visits');
         if (error) {
             console.error("Error fetching public total visits:", error);
             throw error;
@@ -260,16 +266,22 @@ export const api = {
     },
 
     // --- Itinerary ---
+    // FIX: Correctly type the response from `insert().select().single()` by providing a generic to `.single()` to resolve the `never` type error.
     async findOrCreateItinerary(userId: string): Promise<string> {
         const { data, error }: { data: { id: string } | null; error: PostgrestError | null } = await supabaseClient.from('itineraries').select('id').eq('user_id', userId).limit(1).single();
         if (error && error.code !== 'PGRST116') throw error;
         if (data) return data.id;
         
-        // FIX: Removed 'as any' to allow proper type inference for the insert operation's result.
-        // The 'as any' was causing `newData` to be inferred as `never`, leading to a compile-time error.
-        const { data: newData, error: insertError } = await supabaseClient.from('itineraries').insert({ user_id: userId, name: "My Itinerary" }).select().single();
+        // FIX: Added an explicit type to the destructured `newData` to resolve the `never` type error caused by a type inference issue with the Supabase client.
+        const { data: newData, error: insertError }: { data: Tables<'itineraries'> | null; error: PostgrestError | null } = await (supabaseClient
+            .from('itineraries') as any)
+            .insert({ user_id: userId, name: "My Itinerary" })
+            .select()
+            .single();
+        
         if (insertError) throw insertError;
         if (!newData) throw new Error("Itinerary creation failed: no data returned.");
+        
         return newData.id;
     },
     async fetchMyItineraryItems(itineraryId: string): Promise<ItineraryItem[]> {
@@ -281,7 +293,19 @@ export const api = {
         if (error) throw error;
         return (data as ItineraryItem[]) || [];
     },
-    addItineraryItem: (item: TablesInsert<'itinerary_items'>) => (supabaseClient.from('itinerary_items') as any).insert(item),
+    async addItineraryItem(item: TablesInsert<'itinerary_items'>): Promise<ItineraryItem> {
+        // FIX: Cast `rpc` to `any` because `add_itinerary_item` is not defined in the auto-generated types, which causes argument type errors.
+        // Also cast the returned `data` to `any` to resolve the 'never' type issue.
+        const { data, error } = await (supabaseClient.rpc as any)('add_itinerary_item', {
+            p_itinerary_id: item.itinerary_id,
+            p_item_id: item.item_id,
+            p_item_type: item.item_type,
+            p_item_name: item.item_name,
+        }).single();
+
+        if (error) throw error;
+        return data as any;
+    },
     removeItineraryItem: (itemId: string) => supabaseClient.from('itinerary_items').delete().eq('id', itemId),
     clearMyItinerary: (itineraryId: string) => supabaseClient.from('itinerary_items').delete().eq('itinerary_id', itineraryId),
 };

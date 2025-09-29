@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useMemo, useState, useCallback } from 'react';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
 import Select from '../ui/Select.tsx';
@@ -9,6 +9,7 @@ import { ThemeContext } from '../ThemeContext.tsx';
 import { useAppContext } from '../AppContext.tsx';
 import Spinner from '../ui/Spinner.tsx';
 import VisitorDataUploadModal from '../ui/VisitorDataUploadModal.tsx';
+import { useToast } from '../ToastContext.tsx';
 
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode }> = ({ title, value, icon }) => (
     <Card>
@@ -27,6 +28,7 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode }
 const VisitorAnalyticsView: React.FC = () => {
   const { theme } = useContext(ThemeContext);
   const { visitorAnalyticsData, isLoadingVisitorAnalytics, currentUser } = useAppContext();
+  const { showToast } = useToast();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   const isAdminOrEditor = useMemo(() => currentUser?.role === 'Admin' || currentUser?.role === 'Editor', [currentUser]);
@@ -52,6 +54,40 @@ const VisitorAnalyticsView: React.FC = () => {
   const yearData = useMemo(() => {
     return visitorAnalyticsData.filter(d => d.year === selectedYear);
   }, [visitorAnalyticsData, selectedYear]);
+  
+  const handleDownloadReport = useCallback(() => {
+    if (yearData.length === 0) {
+        showToast("No data available to download for the selected year.", "info");
+        return;
+    }
+
+    const headers = ['year', 'month', 'country', 'visitor_type', 'count'];
+    const csvRows = [headers.join(',')];
+
+    yearData.forEach(item => {
+        const values = headers.map(header => {
+            let value = item[header as keyof typeof item];
+            if (typeof value === 'string') {
+                const escapedValue = value.replace(/"/g, '""');
+                return `"${escapedValue}"`;
+            }
+            return value;
+        });
+        csvRows.push(values.join(','));
+    });
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `visitor_analytics_${selectedYear}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [yearData, selectedYear, showToast]);
 
   const { totalVisitors, topCountry, busiestMonth, visitorTypeData, topCountriesData, monthlyTrendData } = useMemo(() => {
     if (yearData.length === 0) {
@@ -83,7 +119,7 @@ const VisitorAnalyticsView: React.FC = () => {
 
     // Monthly Trends (Line Chart)
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthlyData = monthNames.map((name, index) => {
+    const fullMonthlyData = monthNames.map((name, index) => {
         const month = index + 1;
         const monthStats = yearData.filter(d => d.month === month);
         return {
@@ -93,7 +129,14 @@ const VisitorAnalyticsView: React.FC = () => {
             Domestic: monthStats.filter(d => d.visitor_type === 'Domestic').reduce((sum, i) => sum + i.count, 0),
         };
     });
-    const busiestMonthName = [...monthlyData].sort((a,b) => b.Total - a.Total)[0]?.month || 'N/A';
+    
+    // Find the last month that has data to prevent the graph line from dropping to zero for future months.
+    const lastMonthWithDataIndex = fullMonthlyData.map(d => d.Total > 0).lastIndexOf(true);
+    // If data exists, slice up to the last month with data. Otherwise, the chart will be empty.
+    const monthlyDataForChart = lastMonthWithDataIndex > -1 ? fullMonthlyData.slice(0, lastMonthWithDataIndex + 1) : [];
+
+    // The busiest month calculation should still consider all months.
+    const busiestMonthName = [...fullMonthlyData].sort((a,b) => b.Total - a.Total)[0]?.month || 'N/A';
 
     return {
         totalVisitors: total,
@@ -101,7 +144,7 @@ const VisitorAnalyticsView: React.FC = () => {
         busiestMonth: busiestMonthName,
         visitorTypeData: pieData,
         topCountriesData: sortedCountries.map(([name, count]) => ({ country: name, count: count as number })).reverse(), // Reverse for horizontal bar chart
-        monthlyTrendData: monthlyData
+        monthlyTrendData: monthlyDataForChart
     };
   }, [yearData]);
   
@@ -140,7 +183,12 @@ const VisitorAnalyticsView: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
             <Select options={yearOptions} value={String(selectedYear)} onChange={e => setSelectedYear(Number(e.target.value))} className="w-32" />
-            <Button variant="secondary" leftIcon={<DownloadIcon className="w-5 h-5"/>} disabled>
+            <Button 
+                variant="secondary" 
+                leftIcon={<DownloadIcon className="w-5 h-5"/>} 
+                onClick={handleDownloadReport}
+                disabled={yearData.length === 0}
+            >
               Download Report
             </Button>
             {isAdminOrEditor && (

@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import { ViewName, NavItemType, UserRole, GrantCategory, PrimaryCreativeCategoryDef, NestedNavItemType } from './types.ts';
 import {
@@ -254,3 +252,5 @@ export const CLUSTER_CATEGORIES = [
     { id: 'Foods', name: 'Foods', icon: FoodsClusterIcon },
     { id: 'Festivals', name: 'Festivals', icon: FestivalsClusterIcon },
 ];
+
+export const SARAWAK_DISTRICTS = [ 'All', 'Kuching', 'Miri', 'Sibu', 'Bintulu', 'Limbang', 'Sarikei', 'Sri Aman', 'Kapit', 'Betong', 'Mukah', 'Serian', 'Samarahan' ];

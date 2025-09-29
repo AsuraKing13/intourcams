@@ -404,7 +404,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         initializeApp();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            // This listener only handles subsequent LOGIN and LOGOUT events, not the initial load.
+            // This listener only handles subsequent LOGIN events, not initial load or logout.
             if (_event === 'SIGNED_IN') {
                 const { data: userProfile, error: profileError } = await supabase.from('users').select('*').eq('id', session!.user.id).single();
                 if (profileError || !userProfile) {
@@ -415,12 +415,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setAuth(prev => ({ ...prev, currentUser: user, isAuthenticated: true, isLoggingOut: false }));
                     await fetchAllData(user);
                 }
-            } else if (_event === 'SIGNED_OUT') {
-                showToast("You have been logged out.", "success");
-                setAuth({ currentUser: null, isAuthenticated: false, isLoggingOut: false, isInitializing: false });
-                setState(initialDataState); // Reset all data
-                await fetchConfig();
-                await fetchAllData(null); // Re-fetch guest data
             }
         });
 
@@ -470,11 +464,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const logoutUser = useCallback(async () => {
         setAuth(prev => ({ ...prev, isLoggingOut: true }));
         const { error } = await api.logoutUser();
+    
         if (error) {
             handleError(error, 'Logout');
             setAuth(prev => ({ ...prev, isLoggingOut: false }));
+            return;
         }
-    }, [handleError]);
+    
+        // After signOut is successful, manually reset the app state for a guest user.
+        // This is more reliable than relying on the onAuthStateChange listener for logout.
+        showToast("You have been logged out.", "success");
+        setAuth({ currentUser: null, isAuthenticated: false, isLoggingOut: false, isInitializing: false });
+        setState(initialDataState);
+        
+        // Use a try-finally block to ensure the logging out indicator is turned off
+        // even if fetching guest data fails.
+        try {
+            await fetchConfig();
+            await fetchAllData(null);
+        } catch (e) {
+            handleError(e, "Fetching guest data after logout");
+        } finally {
+            setAuth(prev => ({ ...prev, isLoggingOut: false }));
+        }
+    }, [handleError, showToast, fetchConfig, fetchAllData]);
 
     const uploadFile = useCallback(async (bucket: string, file: File, userId: string, oldFileUrl?: string | null) => {
         return api.uploadFile(bucket, file, userId, oldFileUrl);
@@ -992,20 +1005,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         try {
             const itineraryId = await api.findOrCreateItinerary(auth.currentUser.id);
-            const { error } = await api.addItineraryItem({ itinerary_id: itineraryId, item_id: itemId, item_type: itemType, item_name: itemName });
-            if (error && error.code === '23505') {
-                 showToast(`"${itemName}" is already in your itinerary.`, 'info');
-            } else if (error) {
-                throw error;
-            } else {
+            const newItem = await api.addItineraryItem({ itinerary_id: itineraryId, item_id: itemId, item_type: itemType, item_name: itemName });
+            if (newItem) {
+                setState(prev => ({ ...prev, myItinerary: [...prev.myItinerary, newItem] }));
                 showToast(`Added "${itemName}" to your itinerary!`, 'success');
             }
-        } catch (e) { handleError(e, "Adding item to itinerary"); }
+        } catch (e: any) {
+            if (e.code === '23505') { // Handle unique constraint violation gracefully
+                showToast(`"${itemName}" is already in your itinerary.`, 'info');
+            } else {
+                handleError(e, "Adding item to itinerary");
+            }
+        }
     }, [auth.currentUser, showToast, handleError]);
     
     const removeItineraryItem = useCallback(async (itineraryItemId: string) => {
         try {
             await api.removeItineraryItem(itineraryItemId);
+            setState(prev => ({ ...prev, myItinerary: prev.myItinerary.filter(i => i.id !== itineraryItemId) }));
             showToast("Item removed from itinerary.", "success");
         } catch (e) { handleError(e, "Removing itinerary item"); }
     }, [handleError, showToast]);
@@ -1015,6 +1032,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             const itineraryId = await api.findOrCreateItinerary(auth.currentUser.id);
             await api.clearMyItinerary(itineraryId);
+            setState(prev => ({ ...prev, myItinerary: [] }));
             showToast("Itinerary cleared.", "success");
         } catch (e) { handleError(e, "Clearing itinerary"); }
     }, [auth.currentUser, handleError, showToast]);

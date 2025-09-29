@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
+
+
+import React, { useState, useEffect, useRef, useMemo, useContext, useCallback } from 'react';
 import ReactDOMServer from 'react-dom/server';
 import Card from '../ui/Card.tsx';
 import Spinner from '../ui/Spinner.tsx';
 import { useAppContext } from '../AppContext.tsx';
 import { ThemeContext } from '../ThemeContext.tsx';
 import { ViewName, Cluster, AppEvent } from '../../types.ts';
+import Select from '../ui/Select.tsx';
 import { 
     TourismClusterIcon, 
     EventsCalendarIcon, 
@@ -20,6 +23,7 @@ import {
     FestivalsClusterIcon,
     UsersIcon,
     InfoIcon,
+    SARAWAK_DISTRICTS,
 } from '../../constants.tsx';
 
 
@@ -58,13 +62,56 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<any>(null);
     const markersLayerRef = useRef<any>(null);
+    const filterCardRef = useRef<HTMLDivElement>(null);
+    const popupOptionsRef = useRef({ autoPanPadding: L.point(50, 70) });
+    const navigationHandlerRef = useRef<(type: 'cluster' | 'event', id: string) => void>();
 
     const [showClusters, setShowClusters] = useState(true);
     const [showEvents, setShowEvents] = useState(true);
     const allCategoryIds = useMemo(() => new Set(CLUSTER_CATEGORIES.map(c => c.id)), []);
     const [selectedCategories, setSelectedCategories] = useState<Set<string>>(allCategoryIds);
+    const [selectedDistrict, setSelectedDistrict] = useState('All');
 
     const isLoading = isLoadingClusters || isLoadingEvents;
+
+    // This effect keeps the navigation handler up-to-date with the latest state and props.
+    // It's a robust way to avoid stale closures in event handlers that are only registered once.
+    useEffect(() => {
+        navigationHandlerRef.current = (type, id) => {
+            if (type === 'cluster') {
+                const cluster = clusters.find(c => c.id === id);
+                if (cluster) {
+                    sessionStorage.setItem('initialClusterSearch', cluster.name);
+                    setCurrentView(ViewName.TourismCluster);
+                }
+            } else if (type === 'event') {
+                const eventItem = events.find(ev => ev.id === id);
+                if (eventItem) {
+                    sessionStorage.setItem('initialEventSearch', eventItem.title);
+                    setCurrentView(ViewName.EventsCalendar);
+                }
+            }
+        };
+    }, [clusters, events, setCurrentView]);
+
+    // This effect observes the filter card's dimensions and updates the popup padding accordingly.
+    // This makes the map "aware" of the UI above it, preventing popups from opening underneath.
+    useEffect(() => {
+        const filterElement = filterCardRef.current;
+        if (!filterElement) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            const height = filterElement.offsetHeight;
+            // Set top padding to the filter card's height + a 20px margin for aesthetics.
+            popupOptionsRef.current = { autoPanPadding: L.point(50, height + 20) };
+        });
+
+        resizeObserver.observe(filterElement);
+        // FIX: Changed disconnect() to unobserve(filterElement) to satisfy the TypeScript error "Expected 1 arguments, but got 0".
+        // In this context, where only one element is observed, the effect is identical to disconnect().
+        return () => resizeObserver.unobserve(filterElement);
+    }, []);
+
 
     const handleCategoryToggle = (categoryId: string) => {
         setSelectedCategories(prev => {
@@ -224,35 +271,26 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
 
     // Initialize map
     useEffect(() => {
-        if (mapContainerRef.current && !mapRef.current) {
-            const map = L.map(mapContainerRef.current, { center: [2.5, 112.5], zoom: 7, scrollWheelZoom: false });
+        const mapContainer = mapContainerRef.current;
+        if (mapContainer && !mapRef.current) {
+            const map = L.map(mapContainer, { center: [2.5, 112.5], zoom: 7, scrollWheelZoom: false });
             mapRef.current = map;
             markersLayerRef.current = L.layerGroup().addTo(map);
 
-            map.on('popupopen', (e: any) => {
-                const button = e.popup._container.querySelector('.popup-details-button');
-                if (button) {
-                    const buttonType = button.dataset.type;
-                    const itemId = button.dataset.itemId;
-                    button.addEventListener('click', () => {
-                        if (buttonType === 'cluster') {
-                            const cluster = clusters.find(c => c.id === itemId);
-                            if (cluster) {
-                                sessionStorage.setItem('initialClusterSearch', cluster.name);
-                                setCurrentView(ViewName.TourismCluster);
-                            }
-                        } else if (buttonType === 'event') {
-                            const eventItem = events.find(ev => ev.id === itemId);
-                            if (eventItem) {
-                                sessionStorage.setItem('initialEventSearch', eventItem.title);
-                                setCurrentView(ViewName.EventsCalendar);
-                            }
-                        }
-                    });
+            // Use event delegation on the map container for popup buttons. This is more robust
+            // than adding listeners inside popupopen, as it avoids stale state closures.
+            L.DomEvent.on(map.getContainer(), 'click', (ev: MouseEvent) => {
+                const target = ev.target as HTMLElement;
+                if (target.classList.contains('popup-details-button') && navigationHandlerRef.current) {
+                    const type = target.dataset.type as 'cluster' | 'event';
+                    const itemId = target.dataset.itemId;
+                    if (type && itemId) {
+                        navigationHandlerRef.current(type, itemId);
+                    }
                 }
             });
         }
-    }, [clusters, events, setCurrentView]);
+    }, []);
 
     // Update map tiles when theme changes
     useEffect(() => {
@@ -269,12 +307,19 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
 
         if (showClusters) {
             clusters
-                .filter(cluster => cluster.category.some(cat => selectedCategories.has(cat)))
+                .filter(cluster => {
+                    const matchesCategory = cluster.category.some(cat => selectedCategories.has(cat));
+                    if (!matchesCategory) return false;
+
+                    const locationString = `${cluster.location || ''} ${cluster.display_address || ''}`.toLowerCase();
+                    const matchesDistrict = selectedDistrict === 'All' || locationString.includes(selectedDistrict.toLowerCase());
+                    return matchesDistrict;
+                })
                 .forEach(cluster => {
                     if (cluster.latitude && cluster.longitude) {
                         const popupContent = ReactDOMServer.renderToString(<ClusterPopup cluster={cluster} />);
                         const clusterIcon = getClusterIcon(cluster);
-                        const marker = L.marker([cluster.latitude, cluster.longitude], { icon: clusterIcon }).bindPopup(popupContent, { minWidth: 224 });
+                        const marker = L.marker([cluster.latitude, cluster.longitude], { icon: clusterIcon }).bindPopup(popupContent, popupOptionsRef.current);
                         markersLayerRef.current.addLayer(marker);
                     }
                 });
@@ -285,17 +330,24 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
             today.setHours(0, 0, 0, 0); // Normalize to the start of the day for date comparison
 
             events
-                .filter(event => new Date(event.end_date) >= today) // Only show upcoming events
+                .filter(event => {
+                    const isUpcoming = new Date(event.end_date) >= today;
+                    if (!isUpcoming) return false;
+
+                    const locationString = `${event.location_name || ''} ${event.display_address || ''}`.toLowerCase();
+                    const matchesDistrict = selectedDistrict === 'All' || locationString.includes(selectedDistrict.toLowerCase());
+                    return matchesDistrict;
+                })
                 .forEach(event => {
                     if (event.latitude && event.longitude) {
                         const eventIcon = getEventIcon(event);
                         const popupContent = ReactDOMServer.renderToString(<EventPopup event={event} />);
-                        const marker = L.marker([event.latitude, event.longitude], { icon: eventIcon }).bindPopup(popupContent, { minWidth: 224 });
+                        const marker = L.marker([event.latitude, event.longitude], { icon: eventIcon }).bindPopup(popupContent, popupOptionsRef.current);
                         markersLayerRef.current.addLayer(marker);
                     }
                 });
         }
-    }, [clusters, events, showClusters, showEvents, selectedCategories]);
+    }, [clusters, events, showClusters, showEvents, selectedCategories, selectedDistrict]);
 
     return (
         <div className="space-y-6">
@@ -305,12 +357,20 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
                     An interactive map showcasing tourism clusters and events across Sarawak.
                 </p>
             </div>
-            <Card>
+            <Card ref={filterCardRef}>
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center gap-4">
                         <span className="text-sm font-medium mr-2">Show on map:</span>
                          <button onClick={() => setShowClusters(p => !p)} className={`px-3 py-1.5 text-sm rounded-full flex items-center gap-2 transition-colors ${showClusters ? 'bg-brand-green dark:bg-brand-dark-green text-white' : 'bg-neutral-200-light dark:bg-neutral-700-dark'}`}><TourismClusterIcon className="w-4 h-4" /> Clusters</button>
                          <button onClick={() => setShowEvents(p => !p)} className={`px-3 py-1.5 text-sm rounded-full flex items-center gap-2 transition-colors ${showEvents ? 'bg-brand-green dark:bg-brand-dark-green text-white' : 'bg-neutral-200-light dark:bg-neutral-700-dark'}`}><EventsCalendarIcon className="w-4 h-4" /> Events</button>
+                         <div className="flex-grow sm:flex-grow-0 sm:w-64">
+                            <Select
+                                options={SARAWAK_DISTRICTS.map(d => ({ value: d, label: d }))}
+                                value={selectedDistrict}
+                                onChange={(e) => setSelectedDistrict(e.target.value)}
+                                aria-label="Filter by district"
+                            />
+                         </div>
                     </div>
 
                     {showClusters && (

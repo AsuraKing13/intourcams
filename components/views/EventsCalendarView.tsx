@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Card from '../ui/Card.tsx';
 import Button from '../ui/Button.tsx';
@@ -8,7 +9,7 @@ import Select from '../ui/Select.tsx';
 import { useAppContext } from '../AppContext.tsx';
 import { AppEvent, PublicHoliday, AddEventData } from '../../types.ts';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
-import { PlusIcon, PencilIcon, TrashIcon, EventsCalendarIcon, CalendarDaysIcon, SearchIcon } from '../../constants.tsx';
+import { PlusIcon, PencilIcon, TrashIcon, EventsCalendarIcon, CalendarDaysIcon, SearchIcon, SARAWAK_DISTRICTS } from '../../constants.tsx';
 import { useToast } from '../ToastContext.tsx';
 import Spinner from '../ui/Spinner.tsx';
 import MapPicker from '../ui/MapPicker.tsx';
@@ -259,7 +260,6 @@ const EventsCalendarView: React.FC = () => {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    const SARAWAK_DISTRICTS = [ 'All', 'Kuching', 'Miri', 'Sibu', 'Bintulu', 'Limbang', 'Sarikei', 'Sri Aman', 'Kapit', 'Betong', 'Mukah', 'Serian', 'Samarahan' ];
     const districtOptions = SARAWAK_DISTRICTS.map(d => ({ value: d, label: d }));
     
     const canAddEvent = useMemo(() => {
