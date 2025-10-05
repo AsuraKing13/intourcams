@@ -146,6 +146,7 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
     const [editFormData, setEditFormData] = useState<Partial<AddClusterData>>({});
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingVisibility, setIsSavingVisibility] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [useCustomAddress, setUseCustomAddress] = useState(false);
     const [analyticsData, setAnalyticsData] = useState<{ date: string, views: number, clicks: number }[]>([]);
@@ -173,7 +174,7 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
     }, [clusters, currentUser, isAdminOrEditor]);
 
     const clusterOptions = useMemo(() => {
-        return userClusters.map(c => ({ value: c.id, label: c.name }));
+        return userClusters.map(c => ({ value: c.id, label: `${c.name}${c.is_hidden ? ' (Hidden)' : ''}` }));
     }, [userClusters]);
 
     const selectedCluster = useMemo(() => {
@@ -297,6 +298,19 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
             setIsSaving(false);
         }
     };
+
+    const handleToggleVisibility = async () => {
+        if (!selectedCluster) return;
+        setIsSavingVisibility(true);
+        try {
+            await updateCluster(selectedCluster.id, {
+                is_hidden: !selectedCluster.is_hidden,
+            });
+            showToast(`Cluster is now ${!selectedCluster.is_hidden ? 'hidden from public view' : 'visible to the public'}.`, 'success');
+        } finally {
+            setIsSavingVisibility(false);
+        }
+    };
     
     const handleAddProductClick = () => {
         setProductToEdit(null);
@@ -392,7 +406,16 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
                         {mode === 'view' ? (
                             <div className="space-y-4">
                                 <img src={selectedCluster.image} alt={selectedCluster.name} className="w-full h-40 object-cover rounded-lg" />
-                                <InfoRow label="Cluster Name">{selectedCluster.name}</InfoRow>
+                                <InfoRow label="Cluster Name">
+                                    <div className="flex items-center gap-2">
+                                        <span>{selectedCluster.name}</span>
+                                        {selectedCluster.is_hidden && (
+                                            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                Hidden
+                                            </span>
+                                        )}
+                                    </div>
+                                </InfoRow>
                                 {isAdminOrEditor && clusterOwner && (
                                      <InfoRow label="Current Owner">{clusterOwner.name} ({clusterOwner.email})</InfoRow>
                                 )}
@@ -405,10 +428,30 @@ const ManageMyClustersView: React.FC<ManageMyClustersViewProps> = ({ setCurrentV
                                 </InfoRow>
                                 <InfoRow label="Operating Hours">{selectedCluster.timing}</InfoRow>
                                 {isAdminOrEditor && (
-                                    <div className="pt-4 border-t border-neutral-200-light dark:border-neutral-700-dark">
-                                        <Button variant="outline" onClick={() => setIsTransferModalOpen(true)}>
-                                            Transfer Ownership
-                                        </Button>
+                                    <div className="pt-4 border-t border-neutral-200-light dark:border-neutral-700-dark space-y-3">
+                                        <h4 className="font-semibold">Admin Controls</h4>
+                                        <div className="flex items-center justify-between p-3 bg-neutral-100-light dark:bg-neutral-800-dark rounded-lg">
+                                            <div>
+                                                <h5 className="font-semibold text-brand-text-light dark:text-brand-text">
+                                                    Cluster Visibility
+                                                </h5>
+                                                <p className="text-sm text-brand-text-secondary-light dark:text-brand-text-secondary">
+                                                    {selectedCluster.is_hidden ? 'This cluster is hidden from public view.' : 'This cluster is visible to the public.'}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                variant={selectedCluster.is_hidden ? 'primary' : 'outline'}
+                                                onClick={handleToggleVisibility}
+                                                isLoading={isSavingVisibility}
+                                            >
+                                                {selectedCluster.is_hidden ? 'Make Visible' : 'Hide'}
+                                            </Button>
+                                        </div>
+                                        <div className="pt-2">
+                                            <Button variant="outline" onClick={() => setIsTransferModalOpen(true)}>
+                                                Transfer Ownership
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

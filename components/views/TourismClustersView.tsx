@@ -54,7 +54,8 @@ const ClusterCard: React.FC<{
     onSelect: (cluster: Cluster) => void;
     onViewed: (clusterId: string) => void;
     hasBeenViewed: boolean;
-}> = ({ cluster, onSelect, onViewed, hasBeenViewed }) => {
+    isAdmin: boolean;
+}> = ({ cluster, onSelect, onViewed, hasBeenViewed, isAdmin }) => {
     const { incrementClusterView } = useAppContext();
     const cardRef = useRef<HTMLDivElement>(null);
 
@@ -96,9 +97,16 @@ const ClusterCard: React.FC<{
                 <img src={cluster.image} alt={cluster.name} className="w-full h-full object-cover" />
             </div>
             <div className="p-4">
-                <h3 className="font-bold text-lg text-brand-text-light dark:text-brand-text truncate" title={cluster.name}>
-                    {cluster.name}
-                </h3>
+                 <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-bold text-lg text-brand-text-light dark:text-brand-text truncate" title={cluster.name}>
+                        {cluster.name}
+                    </h3>
+                    {isAdmin && cluster.is_hidden && (
+                        <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                            Hidden
+                        </span>
+                    )}
+                </div>
                 <a
                     href={googleMapsUrl}
                     target="_blank"
@@ -389,7 +397,11 @@ const TourismClustersView: React.FC<{ setCurrentView: (view: ViewName) => void }
         return role === 'Admin' || role === 'Editor' || role === 'Tourism Player';
     }, [currentUser]);
 
+    const isAdmin = useMemo(() => currentUser?.role === 'Admin' || currentUser?.role === 'Editor', [currentUser]);
+
     const filteredClusters = useMemo(() => {
+        // RLS handles filtering for non-admins, so client-side filtering is not needed for security.
+        // Admins see all clusters, including hidden ones, via RLS.
         return clusters.filter(cluster => {
             const matchesCategory = selectedCategory === 'All' || cluster.category.includes(selectedCategory);
             const matchesSearch = searchTerm === '' || cluster.name.toLowerCase().includes(searchTerm.toLowerCase()) || (cluster.display_address || cluster.location).toLowerCase().includes(searchTerm.toLowerCase());
@@ -479,6 +491,7 @@ const TourismClustersView: React.FC<{ setCurrentView: (view: ViewName) => void }
                             onSelect={handleSelectCluster}
                             onViewed={handleClusterViewed}
                             hasBeenViewed={viewedClusters.has(cluster.id)}
+                            isAdmin={isAdmin}
                         />
                     ))}
                 </div>

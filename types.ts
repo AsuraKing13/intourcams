@@ -208,6 +208,7 @@ export type AddClusterData = {
     timing: string;
     image: string;
     is_preferred?: boolean | null;
+    is_hidden?: boolean;
     latitude: number | null;
     longitude: number | null;
     display_address: string | null; // Address from geocoding service

@@ -57,7 +57,7 @@ const CLUSTER_CATEGORY_COLORS: { [key: string]: string } = {
 
 
 const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView }) => {
-    const { clusters, isLoadingClusters, events, isLoadingEvents } = useAppContext();
+    const { clusters, isLoadingClusters, events, isLoadingEvents, currentUser } = useAppContext();
     const { theme } = useContext(ThemeContext);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<any>(null);
@@ -107,8 +107,8 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
         });
 
         resizeObserver.observe(filterElement);
-        // FIX: Changed disconnect() to unobserve(filterElement) to satisfy the TypeScript error "Expected 1 arguments, but got 0".
-        // In this context, where only one element is observed, the effect is identical to disconnect().
+        // FIX: The error "Expected 1 arguments, but got 0" points to an issue with `resizeObserver.disconnect()`, likely from a faulty type definition.
+        // Using `unobserve(filterElement)` is functionally equivalent for a single observed element and resolves the error.
         return () => resizeObserver.unobserve(filterElement);
     }, []);
 
@@ -141,12 +141,19 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
         const googleMapsUrl = (cluster.latitude && cluster.longitude)
             ? `https://www.google.com/maps/search/?api=1&query=${cluster.latitude},${cluster.longitude}`
             : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cluster.display_address || cluster.location)}`;
+        
+        const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Editor';
 
         return (
             <div className="w-56 font-sans">
                 <img src={cluster.image} alt={cluster.name} className="w-full h-24 object-cover" />
                 <div className="p-2 space-y-1">
-                    <h3 className="font-bold text-base text-gray-800">{cluster.name}</h3>
+                    <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-base text-gray-800">{cluster.name}</h3>
+                        {isAdmin && cluster.is_hidden && (
+                            <span className="flex-shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-yellow-200 text-yellow-800">Hidden</span>
+                        )}
+                    </div>
                     <div className="flex items-center text-xs text-gray-500">
                         <StarRating rating={cluster.average_rating} />
                         <span className="ml-1">({cluster.review_count})</span>
@@ -232,9 +239,12 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
         const iconHtml = ReactDOMServer.renderToString(<IconComponent className="w-5 h-5 text-white" />);
     
         const backgroundColor = CLUSTER_CATEGORY_COLORS[primaryCategory as keyof typeof CLUSTER_CATEGORY_COLORS] || CLUSTER_CATEGORY_COLORS['Default'];
+
+        const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Editor';
+        const opacity = isAdmin && cluster.is_hidden ? '0.5' : '1';
     
         return L.divIcon({
-            html: `<div style="background-color: ${backgroundColor};" class="w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-md">${iconHtml}</div>`,
+            html: `<div style="background-color: ${backgroundColor}; opacity: ${opacity};" class="w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-md">${iconHtml}</div>`,
             className: 'custom-div-icon',
             iconSize: [32, 32],
             iconAnchor: [16, 16],
@@ -347,7 +357,7 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
                     }
                 });
         }
-    }, [clusters, events, showClusters, showEvents, selectedCategories, selectedDistrict]);
+    }, [clusters, events, showClusters, showEvents, selectedCategories, selectedDistrict, currentUser]);
 
     return (
         <div className="space-y-6">
