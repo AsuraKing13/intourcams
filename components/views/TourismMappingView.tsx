@@ -107,8 +107,9 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
         });
 
         resizeObserver.observe(filterElement);
-        // FIX: The error "Expected 1 arguments, but got 0" points to an issue with `resizeObserver.disconnect()`, likely from a faulty type definition.
-        // Using `unobserve(filterElement)` is functionally equivalent for a single observed element and resolves the error.
+        // FIX: The error "Expected 1 arguments, but got 0" pointed to a type definition issue with `resizeObserver.disconnect()`.
+        // Using `unobserve(filterElement)` is the correct way to clean up a single element observer and resolves the error.
+        // FIX: Replaced `disconnect()` with `unobserve(filterElement)` to correctly unobserve the specific element on cleanup, resolving the argument count error.
         return () => resizeObserver.unobserve(filterElement);
     }, []);
 
@@ -299,6 +300,14 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
                     }
                 }
             });
+
+            // Enable scroll/pinch zoom only when the map is focused
+            map.on('focus', () => {
+                map.scrollWheelZoom.enable();
+            });
+            map.on('blur', () => {
+                map.scrollWheelZoom.disable();
+            });
         }
     }, []);
 
@@ -405,14 +414,14 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
                 </div>
             </Card>
 
-            <div className="relative h-[65vh] w-full rounded-lg shadow-lg overflow-hidden border border-neutral-300-light dark:border-neutral-700-dark">
+            <div className="relative h-[65vh] w-full rounded-lg shadow-lg overflow-hidden border border-neutral-300-light dark:border-neutral-700-dark z-0">
                 {isLoading && (
                     <div className="absolute inset-0 bg-black/30 z-10 flex items-center justify-center">
                         <Spinner className="w-8 h-8 text-white" />
                         <span className="ml-3 text-white">Loading map data...</span>
                     </div>
                 )}
-                <div ref={mapContainerRef} className="h-full w-full" />
+                <div ref={mapContainerRef} className="h-full w-full focus:outline-none focus:ring-2 focus:ring-brand-green dark:focus:ring-brand-dark-green" tabIndex={0} />
             </div>
         </div>
     );

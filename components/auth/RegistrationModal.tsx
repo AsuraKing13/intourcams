@@ -103,7 +103,7 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, onClose, 
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Full Name"
+            label="Username"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

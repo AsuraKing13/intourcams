@@ -119,7 +119,7 @@ const ProfileSettings: React.FC = () => {
             <p className="p-2.5 rounded-lg bg-neutral-100-light dark:bg-neutral-700-dark text-brand-text-secondary-light dark:text-brand-text-secondary">{currentUser.email}</p>
           </div>
           <Input
-            label="Full Name"
+            label="Username"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

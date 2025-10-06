@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewName, ItineraryItem, Cluster } from '../../types.ts';
 import { useAppContext } from '../AppContext.tsx';
@@ -145,8 +146,7 @@ const AIPlannerView: React.FC<AIPlannerViewProps> = ({ setCurrentView, onAuthReq
 
             const relevantClusters = clusters.filter(c => {
                 const matchesLocation = !locationLower || (c.display_address || c.location).toLowerCase().includes(locationLower);
-                // FIX: Add a type guard to ensure `cat` is a string before calling `toLowerCase`.
-                // This resolves a TypeScript error where `cat` was being inferred as `unknown`.
+                // FIX: Add a type guard to ensure `cat` is a string before calling `toLowerCase` to resolve a TypeScript error where `cat` was being inferred as `unknown`.
                 const matchesActivity = selectedActivities.length === 0 || c.category.some(cat => typeof cat === 'string' && selectedActivities.includes(cat.toLowerCase()));
                 return matchesLocation && matchesActivity;
             });

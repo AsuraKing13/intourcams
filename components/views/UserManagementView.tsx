@@ -146,7 +146,7 @@ const UserManagementView: React.FC = () => {
           <table className="w-full min-w-[600px] text-sm text-left text-brand-text-secondary-light dark:text-brand-text-secondary">
             <thead className="text-xs text-brand-green-text dark:text-brand-dark-green-text uppercase bg-neutral-100-light dark:bg-neutral-700-dark">
               <tr>
-                <th scope="col" className="px-6 py-3">Name</th>
+                <th scope="col" className="px-6 py-3">Username</th>
                 <th scope="col" className="px-6 py-3">Email</th>
                 <th scope="col" className="px-6 py-3">Role</th>
                 <th scope="col" className="px-6 py-3">Tier</th>
@@ -211,7 +211,7 @@ const UserManagementView: React.FC = () => {
         >
             <form onSubmit={handleEditUserFormSubmit} className="space-y-4">
             <Input
-                label="Full Name *"
+                label="Username *"
                 name="name"
                 value={userFormData.name}
                 onChange={handleEditUserFormChange}

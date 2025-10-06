@@ -12,6 +12,7 @@ interface ModalProps {
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const mouseDownTarget = useRef<EventTarget | null>(null);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -79,6 +80,20 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
   if (size === 'lg') sizeClasses = 'max-w-lg';
   if (size === 'xl') sizeClasses = 'max-w-xl';
   if (size === '2xl') sizeClasses = 'max-w-2xl';
+  
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    mouseDownTarget.current = e.target;
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // This robust check ensures that a click-to-close only happens when
+    // the mouse down and mouse up events both occur on the backdrop itself.
+    // This prevents the modal from closing when a user starts a text selection
+    // inside the modal and accidentally releases the mouse outside on the backdrop.
+    if (e.target === e.currentTarget && mouseDownTarget.current === e.target) {
+      onClose();
+    }
+  };
 
   return (
     <div 
@@ -86,7 +101,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
-      onClick={onClose}
+      onMouseDown={handleMouseDown}
+      onClick={handleBackdropClick}
     >
       <div 
         ref={modalRef}
@@ -95,7 +111,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
                    border border-neutral-300-light dark:border-neutral-700-dark 
                    transform transition-all duration-300 ease-in-out scale-95 opacity-0 animate-modalShow
                    flex flex-col max-h-[90vh]`}
-        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+        // No longer need to stop propagation here
       >
         <header className="flex items-center justify-between p-4 border-b border-neutral-200-light dark:border-neutral-600-dark flex-shrink-0">
           <h3 id="modal-title" className="text-xl font-semibold text-brand-green-text dark:text-brand-dark-green-text">{title}</h3>

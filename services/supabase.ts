@@ -101,17 +101,20 @@ export const api = {
     logoutUser: () => supabase.auth.signOut(),
     updateCurrentUserName: (name: string) => supabase.auth.updateUser({ data: { name }}),
     updateCurrentUserPassword: (pass: string) => supabase.auth.updateUser({ password: pass }),
-    deleteCurrentUserAccount: async () => {
+    async deleteCurrentUserAccount() {
         const { error } = await (supabase.rpc as any)('delete_own_user_account', {});
         if (error) throw error;
     },
 
     // --- File Storage ---
-    async uploadFile(bucket: string, file: File, userId: string, oldFileUrl?: string | null) {
+    async uploadFile(bucket: string, file: File, userId: string, oldFileUrl?: string | null): Promise<{ publicUrl: string, path: string }> {
         if (oldFileUrl) {
             try {
                 const oldFilePath = new URL(oldFileUrl).pathname.split(`/${bucket}/`)[1];
-                if (oldFilePath) await supabase.storage.from(bucket).remove([oldFilePath]);
+                if (oldFilePath) {
+                    const { error } = await supabase.storage.from(bucket).remove([oldFilePath]);
+                    if (error) console.error("Could not remove old file:", error);
+                }
             } catch (e) { console.error("Could not parse or remove old file:", e); }
         }
         const filePath = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
@@ -119,7 +122,7 @@ export const api = {
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
         if (!publicUrl) throw new Error("Could not get public URL for uploaded file.");
-        return publicUrl;
+        return { publicUrl, path: filePath };
     },
     async deleteFile(bucket: string, fileUrl: string) {
          try {
@@ -133,33 +136,33 @@ export const api = {
             throw e;
         }
     },
-    createSignedUrl: async (bucket: string, path: string): Promise<string | null> => {
+    async createSignedUrl(bucket: string, path: string): Promise<string | null> {
         const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
         if (error) throw error;
         return data.signedUrl;
     },
 
     // --- Grant Applications ---
-    addGrantApplication: (newApplication: TablesInsert<'grant_applications'>) => (supabaseClient.from('grant_applications') as any).insert(newApplication),
-    createAdminNotification: (payload: TablesInsert<'notifications'>) => (supabaseClient.from('notifications') as any).insert(payload),
-    rejectPendingApplication: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_application', { p_application_id: appId, p_notes: notes }),
-    makeConditionalOffer: (appId: string, notes: string, amount: number) => (supabaseClient.rpc as any)('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }),
-    acceptConditionalOffer: (appId: string) => (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }),
-    declineConditionalOffer: (appId: string) => (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }),
-    submitReport: (appId: string, reportFile: any, reportType: 'early' | 'final') => (supabaseClient.rpc as any)('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }),
-    approveEarlyReportAndDisburse: (appId: string, amount: number, notes: string) => (supabaseClient.rpc as any)('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }),
-    rejectEarlyReportSubmission: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_early_report', { p_application_id: appId, p_notes: notes }),
-    rejectFinalReportSubmission: (appId: string, notes: string) => (supabaseClient.rpc as any)('admin_reject_final_report', { p_application_id: appId, p_notes: notes }),
-    completeGrantApplication: (appId: string, amount: number, notes: string) => (supabaseClient.rpc as any)('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }),
+    async addGrantApplication(newApplication: TablesInsert<'grant_applications'>) { const { error } = await (supabaseClient.from('grant_applications') as any).insert(newApplication); if (error) throw error; },
+    async createAdminNotification(payload: TablesInsert<'notifications'>) { const { error } = await (supabaseClient.from('notifications') as any).insert(payload); if (error) throw error; },
+    async rejectPendingApplication(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_application', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async makeConditionalOffer(appId: string, notes: string, amount: number) { const { error } = await supabaseClient.rpc('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }); if (error) throw error; },
+    async acceptConditionalOffer(appId: string) { const { error } = await supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }); if (error) throw error; },
+    async declineConditionalOffer(appId: string) { const { error } = await supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }); if (error) throw error; },
+    async submitReport(appId: string, reportFile: any, reportType: 'early' | 'final') { const { error } = await supabaseClient.rpc('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }); if (error) throw error; },
+    async approveEarlyReportAndDisburse(appId: string, amount: number, notes: string) { const { error } = await supabaseClient.rpc('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
+    async rejectEarlyReportSubmission(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_early_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async rejectFinalReportSubmission(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_final_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async completeGrantApplication(appId: string, amount: number, notes: string) { const { error } = await supabaseClient.rpc('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
 
     // --- Clusters ---
-    addCluster: (newCluster: TablesInsert<'clusters'>) => (supabaseClient.from('clusters') as any).insert(newCluster),
-    addClustersBatch: (payload: TablesInsert<'clusters'>[]) => (supabaseClient.from('clusters') as any).insert(payload),
-    updateCluster: (id: string, data: TablesUpdate<'clusters'>) => (supabaseClient.from('clusters') as any).update(data).eq('id', id),
-    deleteCluster: (id: string) => supabaseClient.from('clusters').delete().eq('id', id),
-    incrementClusterView: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_view', { cluster_id_to_increment: clusterId }),
-    incrementClusterClick: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_click', { cluster_id_to_increment: clusterId }),
-    transferClusterOwnership: (clusterId: string, newOwnerId: string) => (supabaseClient.rpc as any)('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }),
+    async addCluster(newCluster: TablesInsert<'clusters'>) { const { error } = await (supabaseClient.from('clusters') as any).insert(newCluster); if (error) throw error; },
+    async addClustersBatch(payload: TablesInsert<'clusters'>[]) { const { error } = await (supabaseClient.from('clusters') as any).insert(payload); if (error) throw error; },
+    async updateCluster(id: string, data: TablesUpdate<'clusters'>) { const { error } = await (supabaseClient.from('clusters') as any).update(data).eq('id', id); if (error) throw error; },
+    async deleteCluster(id: string) { const { error } = await supabaseClient.from('clusters').delete().eq('id', id); if (error) throw error; },
+    incrementClusterView: (clusterId: string) => supabaseClient.rpc('increment_cluster_view', { cluster_id_to_increment: clusterId }),
+    incrementClusterClick: (clusterId: string) => supabaseClient.rpc('increment_cluster_click', { cluster_id_to_increment: clusterId }),
+    async transferClusterOwnership(clusterId: string, newOwnerId: string) { const { error } = await supabaseClient.rpc('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }); if (error) throw error; },
 
     // --- Cluster Reviews & Products ---
     async fetchReviewsForCluster(clusterId: string): Promise<ClusterReview[]> {
@@ -167,7 +170,6 @@ export const api = {
         if (error) throw error;
         return (data as any) || [];
     },
-    // FIX: Restructured the call to destructure data and error, and cast the `from` call to `any` to bypass faulty type inference on the `insert` method. This resolves the 'never' type error.
     async addReviewForCluster(newReview: TablesInsert<'cluster_reviews'>): Promise<Tables<'cluster_reviews'>> {
         const { data, error } = await (supabaseClient.from('cluster_reviews') as any).insert(newReview).select().single();
         if (error) throw error;
@@ -179,40 +181,40 @@ export const api = {
         if (error) throw error;
         return data || [];
     },
-    addProduct: (newProduct: TablesInsert<'cluster_products'>) => (supabaseClient.from('cluster_products') as any).insert(newProduct),
-    updateProduct: (id: string, data: Partial<AddClusterProductData>) => (supabaseClient.from('cluster_products') as any).update(data).eq('id', id),
-    deleteProduct: (id: string) => supabaseClient.from('cluster_products').delete().eq('id', id),
+    async addProduct(newProduct: TablesInsert<'cluster_products'>) { const { error } = await (supabaseClient.from('cluster_products') as any).insert(newProduct); if (error) throw error; },
+    async updateProduct(id: string, data: Partial<AddClusterProductData>) { const { error } = await (supabaseClient.from('cluster_products') as any).update(data).eq('id', id); if (error) throw error; },
+    async deleteProduct(id: string) { const { error } = await supabaseClient.from('cluster_products').delete().eq('id', id); if (error) throw error; },
 
     // --- Events ---
-    addEvent: (newEvent: TablesInsert<'events'>) => (supabaseClient.from('events') as any).insert(newEvent),
-    updateEvent: (id: string, data: Partial<AddEventData>) => (supabaseClient.from('events') as any).update(data).eq('id', id),
-    deleteEvent: (id: string) => supabaseClient.from('events').delete().eq('id', id),
+    async addEvent(newEvent: TablesInsert<'events'>) { const { error } = await (supabaseClient.from('events') as any).insert(newEvent); if (error) throw error; },
+    async updateEvent(id: string, data: Partial<AddEventData>) { const { error } = await (supabaseClient.from('events') as any).update(data).eq('id', id); if (error) throw error; },
+    async deleteEvent(id: string) { const { error } = await supabaseClient.from('events').delete().eq('id', id); if (error) throw error; },
 
     // --- Notifications ---
-    markNotificationAsRead: (id: string, payload: TablesUpdate<'notifications'>) => (supabaseClient.from('notifications') as any).update(payload).eq('id', id),
-    clearAllNotifications: (notificationIds: string[]) => (supabaseClient.rpc as any)('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }),
-    deleteGlobalNotification: (id: string) => supabaseClient.from('notifications').delete().eq('id', id),
+    async markNotificationAsRead(id: string, payload: TablesUpdate<'notifications'>) { const { error } = await (supabaseClient.from('notifications') as any).update(payload).eq('id', id); if (error) throw error; },
+    async clearAllNotifications(notificationIds: string[]) { const { error } = await supabaseClient.rpc('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }); if (error) throw error; },
+    async deleteGlobalNotification(id: string) { const { error } = await supabaseClient.from('notifications').delete().eq('id', id); if (error) throw error; },
 
     // --- User Management ---
-    editUser: (id: string, payload: TablesUpdate<'users'>) => (supabaseClient.from('users') as any).update(payload).eq('id', id),
+    async editUser(id: string, payload: TablesUpdate<'users'>) { const { error } = await (supabaseClient.from('users') as any).update(payload).eq('id', id); if (error) throw error; },
     
     // --- Feedback ---
-    addFeedback: (payload: TablesInsert<'feedback'>) => (supabaseClient.from('feedback') as any).insert(payload),
-    updateFeedbackStatus: (id: string, status: FeedbackStatus) => (supabaseClient.rpc as any)('update_feedback_status', { p_id: id, p_status: status }),
+    async addFeedback(payload: TablesInsert<'feedback'>) { const { error } = await (supabaseClient.from('feedback') as any).insert(payload); if (error) throw error; },
+    async updateFeedbackStatus(id: string, status: FeedbackStatus) { const { error } = await supabaseClient.rpc('update_feedback_status', { p_id: id, p_status: status }); if (error) throw error; },
     
     // --- Promotions ---
-    addPromotion: (payload: TablesInsert<'promotions'>) => (supabaseClient.from('promotions') as any).insert(payload),
-    updatePromotion: (id: number, payload: TablesUpdate<'promotions'>) => (supabaseClient.from('promotions') as any).update(payload).eq('id', id),
-    deletePromotion: (id: number) => supabaseClient.from('promotions').delete().eq('id', id),
+    async addPromotion(payload: TablesInsert<'promotions'>) { const { error } = await (supabaseClient.from('promotions') as any).insert(payload); if (error) throw error; },
+    async updatePromotion(id: number, payload: TablesUpdate<'promotions'>) { const { error } = await (supabaseClient.from('promotions') as any).update(payload).eq('id', id); if (error) throw error; },
+    async deletePromotion(id: number) { const { error } = await supabaseClient.from('promotions').delete().eq('id', id); if (error) throw error; },
 
     // --- Website Management ---
-    updateAppConfig: (payload: TablesUpdate<'app_config'>, key: string) => (supabaseClient.from('app_config') as any).update(payload).eq('key', key),
-    upsertAppConfig: (payload: TablesInsert<'app_config'>) => (supabaseClient.from('app_config') as any).upsert(payload),
-    setSiteBanner: async (message: string, expires_at: string | null) => {
-        const { data: bannersToDelete, error: fetchError } = await supabaseClient.from('notifications').select('id').eq('recipient_id', 'global_banner');
+    async updateAppConfig(payload: TablesUpdate<'app_config'>, key: string) { const { error } = await (supabaseClient.from('app_config') as any).update(payload).eq('key', key); if (error) throw error; },
+    async upsertAppConfig(payload: TablesInsert<'app_config'>) { const { error } = await (supabaseClient.from('app_config') as any).upsert(payload); if (error) throw error; },
+    async setSiteBanner(message: string, expires_at: string | null) {
+        const { data: bannersToDelete, error: fetchError } = await (supabaseClient.from('notifications') as any).select('id').eq('recipient_id', 'global_banner');
         if (fetchError) throw fetchError;
         if (bannersToDelete && bannersToDelete.length > 0) {
-            const ids = bannersToDelete.map(b => b.id);
+            const ids = bannersToDelete.map((b: any) => b.id);
             const { error: deleteError } = await supabaseClient.from('notifications').delete().in('id', ids);
             if (deleteError) throw deleteError;
         }
@@ -220,20 +222,20 @@ export const api = {
             id: crypto.randomUUID(), recipient_id: 'global_banner', message, 
             type: 'status_change', timestamp: new Date().toISOString(), expires_at 
         };
-        await (supabaseClient.from('notifications') as any).insert(newBanner);
+        const { error: insertError } = await (supabaseClient.from('notifications') as any).insert(newBanner);
+        if (insertError) throw insertError;
     },
-    sendGlobalPanelNotification: (message: string) => (supabaseClient.rpc as any)('send_notification_to_all_users', { p_message: message }),
+    async sendGlobalPanelNotification(message: string) { const { error } = await supabaseClient.rpc('send_notification_to_all_users', { p_message: message }); if (error) throw error; },
 
     // --- Analytics ---
-    uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => (supabaseClient.rpc as any)('upload_visitor_analytics_batch', { p_data: data as unknown as Json }),
-    logPageView: (pagePath: string, sessionId: string) => (supabaseClient.rpc as any)('log_page_view', { p_page_path: pagePath, p_session_id: sessionId }),
+    async uploadVisitorAnalyticsBatch(data: VisitorAnalyticsData[]) { const { error } = await supabaseClient.rpc('upload_visitor_analytics_batch', { p_data: data as unknown as Json }); if (error) throw error; },
+    async logPageView(pagePath: string, sessionId: string) { const { error } = await supabaseClient.rpc('log_page_view', { p_page_path: pagePath, p_session_id: sessionId }); if (error) console.error("Failed to log page view:", error); },
     async getWebsiteTrafficSummary(periodDays: number): Promise<WebsiteTrafficSummary> {
         const { data, error } = await (supabaseClient.rpc as any)('get_website_traffic_summary', { p_period_days: periodDays });
         if (error) throw error;
         return data as unknown as WebsiteTrafficSummary;
     },
     async getPublicTotalVisits(): Promise<number | null> {
-        // FIX: Corrected RPC call for functions with no arguments.
         const { data, error } = await supabaseClient.rpc('get_public_total_visits');
         if (error) {
             console.error("Error fetching public total visits:", error);
@@ -253,11 +255,14 @@ export const api = {
         if (error && error.code !== 'PGRST116') throw error; // Ignore "not found" errors
         return data;
     },
-    setCachedAiInsight: (viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) => (supabaseClient.from('ai_insights') as any).upsert(
-        { view_name: viewName, filter_key: filterKey, content, data_last_updated_at: dataLastUpdatedAt },
-        { onConflict: 'view_name,filter_key' }
-    ),
-    getLatestEventTimestampForYear: async (year: number) => {
+    async setCachedAiInsight(viewName: string, filterKey: string, content: string, dataLastUpdatedAt: string) {
+        const { error } = await (supabaseClient.from('ai_insights') as any).upsert(
+            { view_name: viewName, filter_key: filterKey, content, data_last_updated_at: dataLastUpdatedAt },
+            { onConflict: 'view_name,filter_key' }
+        );
+        if (error) throw error;
+    },
+    async getLatestEventTimestampForYear(year: number) {
         const startDate = `${year}-01-01T00:00:00.000Z`;
         const endDate = `${year}-12-31T23:59:59.999Z`;
         const { data, error } = await supabaseClient.from('events').select('updated_at').gte('start_date', startDate).lte('start_date', endDate).order('updated_at', { ascending: false }).limit(1).single();
@@ -266,13 +271,11 @@ export const api = {
     },
 
     // --- Itinerary ---
-    // FIX: Correctly type the response from `insert().select().single()` by providing a generic to `.single()` to resolve the `never` type error.
     async findOrCreateItinerary(userId: string): Promise<string> {
         const { data, error }: { data: { id: string } | null; error: PostgrestError | null } = await supabaseClient.from('itineraries').select('id').eq('user_id', userId).limit(1).single();
         if (error && error.code !== 'PGRST116') throw error;
         if (data) return data.id;
         
-        // FIX: Added an explicit type to the destructured `newData` to resolve the `never` type error caused by a type inference issue with the Supabase client.
         const { data: newData, error: insertError }: { data: Tables<'itineraries'> | null; error: PostgrestError | null } = await (supabaseClient
             .from('itineraries') as any)
             .insert({ user_id: userId, name: "My Itinerary" })
@@ -294,8 +297,6 @@ export const api = {
         return (data as ItineraryItem[]) || [];
     },
     async addItineraryItem(item: TablesInsert<'itinerary_items'>): Promise<ItineraryItem> {
-        // FIX: Cast `rpc` to `any` because `add_itinerary_item` is not defined in the auto-generated types, which causes argument type errors.
-        // Also cast the returned `data` to `any` to resolve the 'never' type issue.
         const { data, error } = await (supabaseClient.rpc as any)('add_itinerary_item', {
             p_itinerary_id: item.itinerary_id,
             p_item_id: item.item_id,
@@ -306,6 +307,6 @@ export const api = {
         if (error) throw error;
         return data as any;
     },
-    removeItineraryItem: (itemId: string) => supabaseClient.from('itinerary_items').delete().eq('id', itemId),
-    clearMyItinerary: (itineraryId: string) => supabaseClient.from('itinerary_items').delete().eq('itinerary_id', itineraryId),
+    async removeItineraryItem(itemId: string) { const { error } = await supabaseClient.from('itinerary_items').delete().eq('id', itemId); if (error) throw error; },
+    async clearMyItinerary(itineraryId: string) { const { error } = await supabaseClient.from('itinerary_items').delete().eq('itinerary_id', itineraryId); if (error) throw error; },
 };

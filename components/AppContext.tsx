@@ -489,10 +489,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, [handleError, showToast, fetchConfig, fetchAllData]);
 
-    const uploadFile = useCallback(async (bucket: string, file: File, userId: string, oldFileUrl?: string | null) => {
-        return api.uploadFile(bucket, file, userId, oldFileUrl);
-    }, []);
-
     const deleteFile = useCallback(async(bucket: string, fileUrl: string) => {
         try {
             await api.deleteFile(bucket, fileUrl);
@@ -595,8 +591,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!auth.currentUser) throw new Error("Authentication required.");
         try {
             const bucket = reportType === 'early' ? 'grant-early-report-files' : 'grant-final-report-files';
-            const filePath = `${auth.currentUser.id}/${appId}/${Date.now()}-${file.name}`;
-            await api.uploadFile(bucket, file, auth.currentUser.id);
+            const { path: filePath } = await api.uploadFile(bucket, file, auth.currentUser.id);
             const reportFile: ReportFile = { path: filePath, file_name: file.name, submitted_at: new Date().toISOString() };
             await api.submitReport(appId, reportFile, reportType);
             showToast(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} report submitted for review.`, "success");
@@ -681,10 +676,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch(error) { handleError(error, "Deleting cluster"); return false; }
     }, [handleError, state.clusters, deleteFile]);
     
-    const uploadClusterImage = useCallback((file: File, oldImageUrl?: string) => {
+    const uploadClusterImage = useCallback(async (file: File, oldImageUrl?: string): Promise<string> => {
         if (!auth.currentUser) throw new Error("Authentication required.");
-        return uploadFile('cluster-images', file, auth.currentUser.id, oldImageUrl);
-    }, [auth.currentUser, uploadFile]);
+        const { publicUrl } = await api.uploadFile('cluster-images', file, auth.currentUser.id, oldImageUrl);
+        return publicUrl;
+    }, [auth.currentUser]);
     
     const transferClusterOwnership = useCallback(async (clusterId: string, newOwnerId: string): Promise<boolean> => {
         try {
@@ -755,10 +751,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch(error) { handleError(error, "Deleting product"); return false; }
     }, [handleError, showToast, deleteFile]);
     
-    const uploadProductImage = useCallback((file: File, oldImageUrl?: string | null) => {
+    const uploadProductImage = useCallback(async (file: File, oldImageUrl?: string | null): Promise<string> => {
         if (!auth.currentUser) throw new Error("Authentication required.");
-        return uploadFile('product-images', file, auth.currentUser.id, oldImageUrl);
-    }, [auth.currentUser, uploadFile]);
+        const { publicUrl } = await api.uploadFile('product-images', file, auth.currentUser.id, oldImageUrl);
+        return publicUrl;
+    }, [auth.currentUser]);
 
     const addEvent = useCallback(async (data: AddEventData) => {
         if (!auth.currentUser) throw new Error("Authentication required.");
@@ -783,10 +780,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (error) { handleError(error, "Deleting event"); return false; }
     }, [handleError, showToast]);
     
-    const uploadEventImage = useCallback((file: File, oldImageUrl?: string | null) => {
+    const uploadEventImage = useCallback(async (file: File, oldImageUrl?: string | null): Promise<string> => {
         if (!auth.currentUser) throw new Error("Authentication required.");
-        return uploadFile('event-images', file, auth.currentUser.id, oldImageUrl);
-    }, [auth.currentUser, uploadFile]);
+        const { publicUrl } = await api.uploadFile('event-images', file, auth.currentUser.id, oldImageUrl);
+        return publicUrl;
+    }, [auth.currentUser]);
 
     const getNotificationsForCurrentUser = useCallback(() => {
         if (!auth.currentUser) return [];
@@ -925,15 +923,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch(error) { handleError(error, "Deleting promotion"); throw error; }
     }, [handleError, showToast, deleteFile]);
 
-    const uploadPromotionImage = useCallback((file: File, oldImageUrl?: string) => {
+    const uploadPromotionImage = useCallback(async (file: File, oldImageUrl?: string): Promise<string> => {
         if (!auth.currentUser) throw new Error("Auth required.");
-        return uploadFile('promotion-images', file, auth.currentUser.id, oldImageUrl);
-    }, [auth.currentUser, uploadFile]);
+        const { publicUrl } = await api.uploadFile('promotion-images', file, auth.currentUser.id, oldImageUrl);
+        return publicUrl;
+    }, [auth.currentUser]);
     
-    const uploadBannerImage = useCallback((file: File, oldImageUrl?: string) => {
+    const uploadBannerImage = useCallback(async (file: File, oldImageUrl?: string): Promise<string> => {
         if (!auth.currentUser) throw new Error("Auth required.");
-        return uploadFile('banner-images', file, auth.currentUser.id, oldImageUrl);
-    }, [auth.currentUser, uploadFile]);
+        const { publicUrl } = await api.uploadFile('banner-images', file, auth.currentUser.id, oldImageUrl);
+        return publicUrl;
+    }, [auth.currentUser]);
 
     const updateBannerImageUrl = useCallback(async(url: string) => {
         try {
