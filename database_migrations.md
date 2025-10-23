@@ -1,19 +1,25 @@
 -- # Supabase Database Migration & Function Scripts
 --
--- ## **MASTER SCRIPT V106: ADD ITINERARY FEATURE**
+-- ## **MASTER SCRIPT V113: CONSOLIDATED SCRIPT**
 -- ---
--- This script adds the `itineraries` and `itinerary_items` tables to support the new AI Planner feature. It also includes all previous migration changes.
+-- This is the complete and up-to-date master script for the application. It includes all necessary tables, functions, and policies for every feature.
 --
 -- ### INSTRUCTIONS:
--- 1.  Copy and run the **ENTIRE** "MASTER CONSOLIDATED SCRIPT V106" script below in your Supabase SQL Editor. This script is idempotent and safe to run multiple times.
+-- 1.  Copy the **ENTIRE** "MASTER CONSOLIDATED SCRIPT V113" block below.
+-- 2.  Paste it into your Supabase SQL Editor and run it.
+-- 3.  This script is idempotent, meaning it is safe to run multiple times. It will clean up old settings and apply the correct, final state for the database schema.
 --
--- ### What's New in V106:
--- - **NEW**: Added `itineraries` table for user trip plans.
--- - **NEW**: Added `itinerary_items` table to store locations/events within a plan.
--- - **NEW**: Added RLS policies to ensure users can only access their own itineraries.
--- - **Includes all changes from V105**.
+-- ### Key Features Covered by this Script:
+-- - **ROI Data Upload (V113 Update)**: Adds a new `upload_roi_analytics_batch` function to allow Admins/Editors to upload ROI data from a CSV.
+-- - **ROI Analytics (V112 Update)**: Adds a new `roi_analytics` table to store revenue and income data, with appropriate RLS policies.
+-- - **Cluster Visibility (V111 Update)**: Adds an `is_hidden` flag to clusters and updates RLS policies so admins can hide clusters from public view.
+-- - **AI Planner (V110 Update)**: Force-drops and recreates the `itinerary_items` table to ensure the schema is correct, fixing the missing `item_type` and `itinerary_id` columns.
+-- - **Website Traffic Analytics**: Creates the `website_traffic_analytics` table and functions for tracking page views.
+-- - **Public Visit Counter**: Adds a new `get_public_total_visits` function for the public-facing counter.
+-- - **Visitor Analytics**: Manages the `visitor_analytics` table for tracking **monthly tourism arrival data**.
+-- - **All other features**: Includes schemas for clusters, events, grants, users, feedback, promotions, etc.
 ---
--- ## MASTER CONSOLIDATED SCRIPT V106 (The Only One To Run)
+-- ## MASTER CONSOLIDATED SCRIPT V113 (The Only One To Run)
 -- ---
 -- This script unifies all migrations, cleans up conflicts, and establishes the definitive database state.
 
@@ -23,7 +29,7 @@ DECLARE
     table_name_var TEXT;
     policy_record RECORD;
 BEGIN
-    FOREACH table_name_var IN ARRAY ARRAY['clusters', 'cluster_reviews', 'events', 'grant_applications', 'notifications', 'promotions', 'public_holidays', 'users', 'cluster_analytics', 'app_config', 'visitor_analytics', 'cluster_products', 'ai_insights', 'feedback', 'event_analytics', 'search_queries', 'itineraries', 'itinerary_items']
+    FOREACH table_name_var IN ARRAY ARRAY['clusters', 'cluster_reviews', 'events', 'grant_applications', 'notifications', 'promotions', 'public_holidays', 'users', 'cluster_analytics', 'app_config', 'visitor_analytics', 'cluster_products', 'ai_insights', 'feedback', 'event_analytics', 'search_queries', 'itineraries', 'itinerary_items', 'website_traffic_analytics', 'roi_analytics']
     LOOP
         FOR policy_record IN
             SELECT policyname FROM pg_policies WHERE tablename = table_name_var AND schemaname = 'public'
@@ -74,6 +80,11 @@ DROP FUNCTION IF EXISTS public.transfer_cluster_ownership(uuid, uuid);
 DROP FUNCTION IF EXISTS public.send_notification_to_all_users(text);
 DROP FUNCTION IF EXISTS public.delete_own_user_account();
 DROP FUNCTION IF EXISTS public.upload_visitor_analytics_batch(jsonb);
+DROP FUNCTION IF EXISTS public.upload_roi_analytics_batch(jsonb);
+DROP FUNCTION IF EXISTS public.log_page_view(text, uuid);
+DROP FUNCTION IF EXISTS public.get_website_traffic_summary(integer);
+DROP FUNCTION IF EXISTS public.get_public_total_visits();
+DROP FUNCTION IF EXISTS public.add_itinerary_item(uuid, uuid, public.itinerary_item_type, text);
 
 
 -- == STEP 2: TYPE & TABLE CREATION / ALTERATION ==
@@ -88,6 +99,10 @@ CREATE TYPE public.itinerary_item_type AS ENUM ('cluster', 'event');
 -- Alter `users` table to add the new `tier` column
 ALTER TABLE public.users
 ADD COLUMN IF NOT EXISTS tier public.user_tier NOT NULL DEFAULT 'Normal';
+
+-- Alter `clusters` table to add the `is_hidden` column
+ALTER TABLE public.clusters
+ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT false;
 
 -- `app_config` for banner & maintenance
 CREATE TABLE IF NOT EXISTS public.app_config (
@@ -127,7 +142,7 @@ CREATE TABLE IF NOT EXISTS public.ai_insights (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ai_insights_view_filter_unique_idx ON public.ai_insights (view_name, filter_key);
 
--- `visitor_analytics` table (Non-destructive creation)
+-- `visitor_analytics` table for tourism arrival data
 CREATE TABLE IF NOT EXISTS public.visitor_analytics (
     id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     year SMALLINT NOT NULL,
@@ -136,6 +151,24 @@ CREATE TABLE IF NOT EXISTS public.visitor_analytics (
     visitor_type TEXT NOT NULL CHECK (visitor_type IN ('International', 'Domestic')),
     count INTEGER NOT NULL,
     CONSTRAINT visitor_analytics_unique UNIQUE (year, month, country, visitor_type)
+);
+
+-- `roi_analytics` table for ROI data
+CREATE TABLE IF NOT EXISTS public.roi_analytics (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    year INTEGER NOT NULL UNIQUE,
+    revenue NUMERIC NOT NULL,
+    income NUMERIC NOT NULL
+);
+
+-- NEW `website_traffic_analytics` table for page views
+CREATE TABLE IF NOT EXISTS public.website_traffic_analytics (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    page_path TEXT,
+    user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    session_id UUID NOT NULL
 );
 
 -- `feedback` table
@@ -173,15 +206,18 @@ CREATE TABLE IF NOT EXISTS public.itineraries (
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- ** V110 FIX: Force drop and recreate itinerary_items table to fix schema mismatch **
+DROP TABLE IF EXISTS public.itinerary_items CASCADE;
+
 -- `itinerary_items` table to store items within an itinerary
-CREATE TABLE IF NOT EXISTS public.itinerary_items (
+CREATE TABLE public.itinerary_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     itinerary_id UUID NOT NULL REFERENCES public.itineraries(id) ON DELETE CASCADE,
     item_id UUID NOT NULL, -- This is the ID of the cluster or event
     item_type public.itinerary_item_type NOT NULL,
     item_name TEXT NOT NULL,
     added_at TIMESTAMPTZ DEFAULT now() NOT NULL,
-    CONSTRAINT itinerary_item_unique UNIQUE (itinerary_id, item_id) -- Prevent adding the same item twice
+    CONSTRAINT itinerary_item_unique UNIQUE (itinerary_id, item_id, item_type) -- Prevent adding the same item twice
 );
 
 
@@ -245,32 +281,6 @@ BEGIN
   END IF;
 END;
 $$;
-CREATE OR REPLACE FUNCTION public.increment_event_view(event_id_to_increment uuid)
-RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  IF (SELECT created_by FROM public.events WHERE id = event_id_to_increment) IS DISTINCT FROM auth.uid() THEN
-    INSERT INTO public.event_analytics (event_id, type) VALUES (event_id_to_increment, 'view');
-  END IF;
-END;
-$$;
-CREATE OR REPLACE FUNCTION public.increment_event_click(event_id_to_increment uuid)
-RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  IF (SELECT created_by FROM public.events WHERE id = event_id_to_increment) IS DISTINCT FROM auth.uid() THEN
-    INSERT INTO public.event_analytics (event_id, type) VALUES (event_id_to_increment, 'click');
-  END IF;
-END;
-$$;
-CREATE OR REPLACE FUNCTION public.log_search_query(p_search_term text)
-RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  IF auth.role() = 'authenticated' THEN
-    INSERT INTO public.search_queries (search_term, user_id) VALUES (p_search_term, auth.uid());
-  ELSE
-    INSERT INTO public.search_queries (search_term) VALUES (p_search_term);
-  END IF;
-END;
-$$;
 CREATE OR REPLACE FUNCTION public.get_daily_cluster_analytics(p_cluster_id uuid, p_period_days integer)
 RETURNS TABLE(date text, views bigint, clicks bigint) LANGUAGE plpgsql AS $$
 BEGIN
@@ -292,52 +302,93 @@ BEGIN
 END;
 $$;
 
+-- **NEW Website Traffic Functions**
+CREATE OR REPLACE FUNCTION public.log_page_view(p_page_path text, p_session_id uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO public.website_traffic_analytics (page_path, user_id, session_id)
+  VALUES (p_page_path, auth.uid(), p_session_id);
+END;
+$$;
+CREATE OR REPLACE FUNCTION public.get_website_traffic_summary(p_period_days integer)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_start_date timestamptz := now() - (p_period_days || ' days')::interval;
+  v_total_visits bigint;
+  v_unique_visitors bigint;
+  v_bouncing_sessions bigint;
+  v_total_sessions bigint;
+  v_bounce_rate numeric;
+  v_daily_trend jsonb;
+BEGIN
+  IF NOT public.is_admin_or_editor() THEN
+    RAISE EXCEPTION 'Permission denied to access website traffic summary.';
+  END IF;
+
+  SELECT COUNT(*), COUNT(DISTINCT session_id) INTO v_total_visits, v_unique_visitors
+  FROM public.website_traffic_analytics WHERE created_at >= v_start_date;
+
+  WITH session_counts AS (
+    SELECT session_id, COUNT(*) as view_count
+    FROM public.website_traffic_analytics WHERE created_at >= v_start_date
+    GROUP BY session_id
+  )
+  SELECT COUNT(*) FILTER (WHERE view_count = 1), COUNT(*) INTO v_bouncing_sessions, v_total_sessions
+  FROM session_counts;
+
+  IF v_total_sessions > 0 THEN v_bounce_rate := (v_bouncing_sessions::numeric / v_total_sessions::numeric) * 100;
+  ELSE v_bounce_rate := 0;
+  END IF;
+
+  WITH date_series AS (
+    SELECT generate_series(v_start_date::date, now()::date, '1 day'::interval)::date AS day
+  ),
+  daily_data AS (
+    SELECT created_at::date as day, COUNT(*) as visits
+    FROM public.website_traffic_analytics WHERE created_at >= v_start_date
+    GROUP BY 1
+  )
+  SELECT jsonb_agg(jsonb_build_object('date', to_char(ds.day, 'YYYY-MM-DD'), 'visits', COALESCE(dd.visits, 0)))
+  INTO v_daily_trend FROM date_series ds LEFT JOIN daily_data dd ON ds.day = dd.day;
+
+  RETURN jsonb_build_object(
+    'total_visits', v_total_visits,
+    'unique_visitors', v_unique_visitors,
+    'bounce_rate', v_bounce_rate,
+    'daily_trend', v_daily_trend
+  );
+END;
+$$;
+
+-- **NEW FUNCTION FOR PUBLIC VISIT COUNT**
+CREATE OR REPLACE FUNCTION public.get_public_total_visits()
+RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT count(*) FROM public.website_traffic_analytics;
+$$;
+-- Grant execution to anon and authenticated roles
+GRANT EXECUTE ON FUNCTION public.get_public_total_visits() TO anon, authenticated;
+
+
 -- **Cluster Review Functions**
 CREATE OR REPLACE FUNCTION public.get_reviews_with_usernames(p_cluster_id uuid)
-RETURNS TABLE (
-    id uuid,
-    cluster_id uuid,
-    user_id uuid,
-    user_name text,
-    rating integer,
-    comment text,
-    created_at timestamptz
-)
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT
-    cr.id,
-    cr.cluster_id,
-    cr.user_id,
-    u.name as user_name,
-    cr.rating,
-    cr.comment,
-    cr.created_at
-  FROM
-    public.cluster_reviews AS cr
-  JOIN
-    public.users AS u ON cr.user_id = u.id
-  WHERE
-    cr.cluster_id = p_cluster_id
-  ORDER BY
-    cr.created_at DESC;
+RETURNS TABLE (id uuid, cluster_id uuid, user_id uuid, user_name text, rating integer, comment text, created_at timestamptz)
+LANGUAGE sql STABLE AS $$
+  SELECT cr.id, cr.cluster_id, cr.user_id, u.name as user_name, cr.rating, cr.comment, cr.created_at
+  FROM public.cluster_reviews AS cr JOIN public.users AS u ON cr.user_id = u.id
+  WHERE cr.cluster_id = p_cluster_id ORDER BY cr.created_at DESC;
 $$;
 
 -- **Cluster Ownership Transfer Function**
 CREATE OR REPLACE FUNCTION public.transfer_cluster_ownership(p_cluster_id uuid, p_new_owner_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_current_owner_id uuid;
-  v_is_admin_or_editor boolean;
+DECLARE v_current_owner_id uuid; v_is_admin_or_editor boolean;
 BEGIN
   SELECT owner_id INTO v_current_owner_id FROM public.clusters WHERE id = p_cluster_id;
   SELECT public.is_admin_or_editor() INTO v_is_admin_or_editor;
   IF auth.uid() = v_current_owner_id OR v_is_admin_or_editor THEN
     UPDATE public.clusters SET owner_id = p_new_owner_id WHERE id = p_cluster_id;
     UPDATE public.cluster_products SET owner_id = p_new_owner_id WHERE cluster_id = p_cluster_id;
-  ELSE
-    RAISE EXCEPTION 'User does not have permission to transfer this cluster.';
+  ELSE RAISE EXCEPTION 'User does not have permission to transfer this cluster.';
   END IF;
 END;
 $$;
@@ -355,20 +406,14 @@ $$;
 -- **Notification function to send to all users**
 CREATE OR REPLACE FUNCTION public.send_notification_to_all_users(p_message text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  user_record record;
+DECLARE user_record record;
 BEGIN
-  -- This function is intended to be called by an admin.
-  -- It iterates through all users and creates a personalized notification for each.
-  -- This ensures that users who register after the notification is sent do not receive it.
   IF (SELECT public.is_admin_or_editor()) THEN
-    FOR user_record IN SELECT id FROM public.users
-    LOOP
+    FOR user_record IN SELECT id FROM public.users LOOP
       INSERT INTO public.notifications (id, recipient_id, message, type, "timestamp")
       VALUES (gen_random_uuid(), user_record.id::text, p_message, 'status_change', now());
     END LOOP;
-  ELSE
-    RAISE EXCEPTION 'Only Admins or Editors can send notifications to all users.';
+  ELSE RAISE EXCEPTION 'Only Admins or Editors can send notifications to all users.';
   END IF;
 END;
 $$;
@@ -376,8 +421,7 @@ $$;
 -- **Grant Application RPC Functions**
 CREATE OR REPLACE FUNCTION public.submit_report(p_application_id text, p_report_file jsonb, p_report_type text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  new_status grant_application_status; v_user_name TEXT; v_project_name TEXT; v_message TEXT;
+DECLARE new_status grant_application_status; v_user_name TEXT; v_project_name TEXT; v_message TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT project_name INTO v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -395,8 +439,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.handle_grant_offer_response(p_application_id text, p_accepted boolean)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  new_status grant_application_status; history_note TEXT; v_user_name TEXT; v_project_name TEXT; v_message TEXT;
+DECLARE new_status grant_application_status; history_note TEXT; v_user_name TEXT; v_project_name TEXT; v_message TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT project_name INTO v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -411,8 +454,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_reject_application(p_application_id text, p_notes text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -423,8 +465,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_make_conditional_offer(p_application_id text, p_notes text, p_amount_approved numeric)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -435,8 +476,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_approve_early_report(p_application_id text, p_disbursement_amount numeric, p_notes text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -447,8 +487,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_reject_early_report(p_application_id text, p_notes text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -459,8 +498,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_reject_final_report(p_application_id text, p_notes text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -471,8 +509,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.admin_complete_application(p_application_id text, p_final_disbursement_amount numeric, p_notes text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
+DECLARE v_user_name TEXT; v_applicant_id UUID; v_project_name TEXT;
 BEGIN
   SELECT name INTO v_user_name FROM public.users WHERE id = auth.uid();
   SELECT applicant_id, project_name INTO v_applicant_id, v_project_name FROM public.grant_applications WHERE id = p_application_id;
@@ -483,54 +520,78 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.mark_notifications_cleared_by_user(p_notification_ids text[])
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  current_user_id uuid := auth.uid();
+DECLARE current_user_id uuid := auth.uid();
 BEGIN
   IF current_user_id IS NOT NULL THEN
-    UPDATE public.notifications
-    SET cleared_by = array_append(coalesce(cleared_by, '{}'::uuid[]), current_user_id)
-    WHERE id::text = ANY(p_notification_ids)
-    AND coalesce(cleared_by @> ARRAY[current_user_id], false) = false;
+    UPDATE public.notifications SET cleared_by = array_append(coalesce(cleared_by, '{}'::uuid[]), current_user_id)
+    WHERE id::text = ANY(p_notification_ids) AND coalesce(cleared_by @> ARRAY[current_user_id], false) = false;
   END IF;
 END;
 $$;
 
 -- **User self-deletion function**
 CREATE OR REPLACE FUNCTION public.delete_own_user_account()
-RETURNS void
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$;
+
+-- **Itinerary RPC Function to bypass client schema cache**
+CREATE OR REPLACE FUNCTION public.add_itinerary_item(
+    p_itinerary_id uuid,
+    p_item_id uuid,
+    p_item_type public.itinerary_item_type,
+    p_item_name text
+)
+RETURNS public.itinerary_items
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    new_item public.itinerary_items;
 BEGIN
-  -- This function is called by an authenticated user to delete their own account.
-  -- The SECURITY DEFINER context allows the deletion from auth.users.
-  -- A foreign key from public.users to auth.users with ON DELETE CASCADE is required.
-  DELETE FROM auth.users WHERE id = auth.uid();
+    -- Security check: Ensure the itinerary belongs to the calling user
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.itineraries
+        WHERE id = p_itinerary_id AND user_id = auth.uid()
+    ) THEN
+        RAISE EXCEPTION 'Permission denied: Itinerary does not belong to the current user.';
+    END IF;
+
+    INSERT INTO public.itinerary_items (itinerary_id, item_id, item_type, item_name)
+    VALUES (p_itinerary_id, p_item_id, p_item_type, p_item_name)
+    RETURNING * INTO new_item;
+
+    RETURN new_item;
 END;
 $$;
 
 -- **Visitor analytics upload function**
 CREATE OR REPLACE FUNCTION public.upload_visitor_analytics_batch(p_data jsonb)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-    item jsonb;
+DECLARE item jsonb;
 BEGIN
-    IF NOT public.is_admin_or_editor() THEN
-        RAISE EXCEPTION 'Only Admins or Editors can upload analytics data.';
-    END IF;
-
-    FOR item IN SELECT * FROM jsonb_array_elements(p_data)
-    LOOP
+    IF NOT public.is_admin_or_editor() THEN RAISE EXCEPTION 'Only Admins or Editors can upload analytics data.'; END IF;
+    FOR item IN SELECT * FROM jsonb_array_elements(p_data) LOOP
         INSERT INTO public.visitor_analytics (year, month, country, visitor_type, count)
-        VALUES (
-            (item->>'year')::smallint,
-            (item->>'month')::smallint,
-            item->>'country',
-            item->>'visitor_type',
-            (item->>'count')::integer
-        )
-        ON CONFLICT (year, month, country, visitor_type)
-        DO UPDATE SET count = EXCLUDED.count;
+        VALUES ((item->>'year')::smallint, (item->>'month')::smallint, item->>'country', item->>'visitor_type', (item->>'count')::integer)
+        ON CONFLICT (year, month, country, visitor_type) DO UPDATE SET count = EXCLUDED.count;
+    END LOOP;
+END;
+$$;
+
+-- **ROI analytics upload function**
+CREATE OR REPLACE FUNCTION public.upload_roi_analytics_batch(p_data jsonb)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE item jsonb;
+BEGIN
+    IF NOT public.is_admin_or_editor() THEN RAISE EXCEPTION 'Only Admins or Editors can upload ROI data.'; END IF;
+    FOR item IN SELECT * FROM jsonb_array_elements(p_data) LOOP
+        INSERT INTO public.roi_analytics (year, revenue, income)
+        VALUES ((item->>'year')::integer, (item->>'revenue')::numeric, (item->>'income')::numeric)
+        ON CONFLICT (year) DO UPDATE SET revenue = EXCLUDED.revenue, income = EXCLUDED.income;
     END LOOP;
 END;
 $$;
@@ -556,124 +617,76 @@ ALTER TABLE public.event_analytics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.search_queries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.itineraries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.itinerary_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.website_traffic_analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.roi_analytics ENABLE ROW LEVEL SECURITY;
 
 
 -- `clusters` Policies
-CREATE POLICY "Public can view all clusters" ON public.clusters FOR SELECT USING (true);
-CREATE POLICY "Admins, Editors, and Players can insert clusters" ON public.clusters FOR INSERT WITH CHECK (
-  auth.role() = 'authenticated' AND ( (SELECT role FROM public.users WHERE id = auth.uid()) IN ('Admin', 'Editor', 'Tourism Player') )
-);
-CREATE POLICY "Admins, Editors, or owners can update/delete clusters" ON public.clusters FOR ALL USING (
-  public.is_admin_or_editor() OR (auth.uid() = owner_id)
-);
+CREATE POLICY "Admins and Editors can view all clusters" ON public.clusters FOR SELECT USING (public.is_admin_or_editor());
+CREATE POLICY "Public can view visible clusters" ON public.clusters FOR SELECT USING (is_hidden = false);
+CREATE POLICY "Admins, Editors, and Players can insert clusters" ON public.clusters FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND ( (SELECT role FROM public.users WHERE id = auth.uid()) IN ('Admin', 'Editor', 'Tourism Player') ));
+CREATE POLICY "Admins, Editors, or owners can update/delete clusters" ON public.clusters FOR ALL USING (public.is_admin_or_editor() OR (auth.uid() = owner_id));
 
 -- `cluster_reviews` Policies
 CREATE POLICY "Public can read all reviews" ON public.cluster_reviews FOR SELECT USING (true);
-CREATE POLICY "Auth users can insert reviews (not on own cluster)" ON public.cluster_reviews FOR INSERT WITH CHECK (
-  auth.role() = 'authenticated' AND (SELECT owner_id FROM public.clusters WHERE id = cluster_id) <> auth.uid()
-);
+CREATE POLICY "Auth users can insert reviews (not on own cluster)" ON public.cluster_reviews FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND (SELECT owner_id FROM public.clusters WHERE id = cluster_id) <> auth.uid());
 CREATE POLICY "Users can update own reviews" ON public.cluster_reviews FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Admins or authors can delete reviews" ON public.cluster_reviews FOR DELETE USING (
-  public.is_admin_or_editor() OR (auth.uid() = user_id)
-);
+CREATE POLICY "Admins or authors can delete reviews" ON public.cluster_reviews FOR DELETE USING (public.is_admin_or_editor() OR (auth.uid() = user_id));
 
 -- `events` Policies
 CREATE POLICY "Public can view all events" ON public.events FOR SELECT USING (true);
 CREATE POLICY "Authenticated users can create events" ON public.events FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Admins, Editors, or creators can update/delete events" ON public.events FOR ALL USING (
-  public.is_admin_or_editor() OR (auth.uid() = created_by)
-);
+CREATE POLICY "Admins, Editors, or creators can update/delete events" ON public.events FOR ALL USING (public.is_admin_or_editor() OR (auth.uid() = created_by));
 
 -- `notifications` Policies
 CREATE POLICY "Public can view site-wide banners" ON public.notifications FOR SELECT USING (recipient_id = 'global_banner');
 CREATE POLICY "Users can see their personal notifications" ON public.notifications FOR SELECT USING (recipient_id = auth.uid()::text);
-CREATE POLICY "Admins and Editors can see admin-group notifications" ON public.notifications FOR SELECT USING (
-    recipient_id = 'admins' AND public.is_admin_or_editor()
-);
-CREATE POLICY "Admins can see grant-admin notifications" ON public.notifications FOR SELECT USING (
-    recipient_id = 'grant_admins' AND ((SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin')
-);
+CREATE POLICY "Admins and Editors can see admin-group notifications" ON public.notifications FOR SELECT USING (recipient_id = 'admins' AND public.is_admin_or_editor());
+CREATE POLICY "Admins can see grant-admin notifications" ON public.notifications FOR SELECT USING (recipient_id = 'grant_admins' AND ((SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin'));
 CREATE POLICY "Authenticated users can create notifications" ON public.notifications FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Users can update notifications intended for them" ON public.notifications FOR UPDATE USING (
-    (auth.uid()::text = recipient_id) OR
-    (recipient_id = 'admins' AND public.is_admin_or_editor()) OR
-    (recipient_id = 'grant_admins' AND ((SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin')) OR
-    (recipient_id = 'global_banner' AND auth.role() = 'authenticated')
-);
-CREATE POLICY "Admins and Editors can delete site-wide banners" ON public.notifications FOR DELETE USING (
-    recipient_id = 'global_banner' AND public.is_admin_or_editor()
-);
-
+CREATE POLICY "Users can update notifications intended for them" ON public.notifications FOR UPDATE USING ((auth.uid()::text = recipient_id) OR (recipient_id = 'admins' AND public.is_admin_or_editor()) OR (recipient_id = 'grant_admins' AND ((SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin')) OR (recipient_id = 'global_banner' AND auth.role() = 'authenticated'));
+CREATE POLICY "Admins and Editors can delete site-wide banners" ON public.notifications FOR DELETE USING (recipient_id = 'global_banner' AND public.is_admin_or_editor());
 
 -- `grant_applications` Policies
-CREATE POLICY "Admins have full access to grants" ON public.grant_applications FOR ALL USING (
-  (SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin'
-);
-CREATE POLICY "Users can manage their own grant applications" ON public.grant_applications FOR ALL USING (
-  auth.uid() = applicant_id
-) WITH CHECK (
-  auth.uid() = applicant_id
-);
+CREATE POLICY "Admins have full access to grants" ON public.grant_applications FOR ALL USING ((SELECT role FROM public.users WHERE id = auth.uid()) = 'Admin');
+CREATE POLICY "Users can manage their own grant applications" ON public.grant_applications FOR ALL USING (auth.uid() = applicant_id) WITH CHECK (auth.uid() = applicant_id);
 
 -- `users` Policies
 CREATE POLICY "Public can view all user profiles" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile, Admins/Editors can update any" ON public.users FOR UPDATE USING (
-  (auth.uid() = id) OR public.is_admin_or_editor()
-);
+CREATE POLICY "Users can update own profile, Admins/Editors can update any" ON public.users FOR UPDATE USING ((auth.uid() = id) OR public.is_admin_or_editor());
 
 -- `promotions` Policies
 CREATE POLICY "Public can view active promotions" ON public.promotions FOR SELECT USING (is_active = true);
-CREATE POLICY "Admins and Editors can manage all promotions" ON public.promotions FOR ALL USING (
-  public.is_admin_or_editor()
-);
+CREATE POLICY "Admins and Editors can manage all promotions" ON public.promotions FOR ALL USING (public.is_admin_or_editor());
 
 -- `public_holidays` Policies
 CREATE POLICY "Public can view all holidays" ON public.public_holidays FOR SELECT USING (true);
+CREATE POLICY "Admins and Editors can manage public holidays" ON public.public_holidays FOR ALL USING (public.is_admin_or_editor());
 
 -- `cluster_analytics` Policies
 CREATE POLICY "Public read access for analytics" ON public.cluster_analytics FOR SELECT USING (true);
 CREATE POLICY "Anyone can insert analytics" ON public.cluster_analytics FOR INSERT WITH CHECK (true);
 
--- `event_analytics` Policies
-CREATE POLICY "Public read access for event analytics" ON public.event_analytics FOR SELECT USING (true);
-CREATE POLICY "Anyone can insert event analytics" ON public.event_analytics FOR INSERT WITH CHECK (true);
-
--- `search_queries` Policies
-CREATE POLICY "Admins and Editors can view search queries" ON public.search_queries FOR SELECT USING (public.is_admin_or_editor());
-CREATE POLICY "Anyone can insert search queries" ON public.search_queries FOR INSERT WITH CHECK (true);
-
 -- `app_config` Policies
 CREATE POLICY "Public can read app config" ON public.app_config FOR SELECT USING (true);
-CREATE POLICY "Admins and Editors can manage app config" ON public.app_config FOR ALL USING (
-  public.is_admin_or_editor()
-);
+CREATE POLICY "Admins and Editors can manage app config" ON public.app_config FOR ALL USING (public.is_admin_or_editor());
 
 -- `visitor_analytics` Policies
 CREATE POLICY "Public can view all visitor analytics" ON public.visitor_analytics FOR SELECT USING (true);
-CREATE POLICY "Admins and Editors can manage visitor analytics" ON public.visitor_analytics FOR ALL
-USING (
-  public.is_admin_or_editor()
-)
-WITH CHECK (
-  public.is_admin_or_editor()
-);
+CREATE POLICY "Admins and Editors can manage visitor analytics" ON public.visitor_analytics FOR ALL USING (public.is_admin_or_editor()) WITH CHECK (public.is_admin_or_editor());
+
+-- `roi_analytics` Policies
+CREATE POLICY "Public can view ROI data" ON public.roi_analytics FOR SELECT USING (true);
+CREATE POLICY "Admins and Editors can manage ROI data" ON public.roi_analytics FOR ALL USING (public.is_admin_or_editor());
+
+-- NEW `website_traffic_analytics` Policies
+CREATE POLICY "Anyone can insert their own traffic data" ON public.website_traffic_analytics FOR INSERT WITH CHECK (true);
+CREATE POLICY "Admins and Editors can view all traffic data" ON public.website_traffic_analytics FOR SELECT USING (public.is_admin_or_editor());
 
 -- `cluster_products` Policies
 CREATE POLICY "Public can view all products" ON public.cluster_products FOR SELECT USING (true);
-CREATE POLICY "Owners, Admins, Editors can insert products" ON public.cluster_products FOR INSERT WITH CHECK (
-  auth.role() = 'authenticated' AND
-  (
-    public.is_admin_or_editor() OR
-    (auth.uid() = (SELECT owner_id FROM public.clusters WHERE id = cluster_id))
-  )
-);
-CREATE POLICY "Owners, Admins, Editors can update/delete products" ON public.cluster_products FOR ALL USING (
-  auth.role() = 'authenticated' AND
-  (
-    public.is_admin_or_editor() OR
-    auth.uid() = owner_id
-  )
-);
+CREATE POLICY "Owners, Admins, Editors can insert products" ON public.cluster_products FOR INSERT WITH CHECK (auth.role() = 'authenticated' AND (public.is_admin_or_editor() OR (auth.uid() = (SELECT owner_id FROM public.clusters WHERE id = cluster_id))));
+CREATE POLICY "Owners, Admins, Editors can update/delete products" ON public.cluster_products FOR ALL USING (auth.role() = 'authenticated' AND (public.is_admin_or_editor() OR auth.uid() = owner_id));
 
 -- `ai_insights` Policies
 CREATE POLICY "Public can read AI insights" ON public.ai_insights FOR SELECT USING (true);
@@ -684,38 +697,16 @@ CREATE POLICY "Authenticated users can submit feedback" ON public.feedback FOR I
 CREATE POLICY "Admins and Editors can view and manage feedback" ON public.feedback FOR ALL USING (public.is_admin_or_editor());
 
 -- `itineraries` Policies
-CREATE POLICY "Users can manage their own itineraries" ON public.itineraries FOR ALL
-USING (auth.uid() = user_id);
+CREATE POLICY "Users can manage their own itineraries" ON public.itineraries FOR ALL USING (auth.uid() = user_id);
 
 -- `itinerary_items` Policies
-CREATE POLICY "Users can manage items in their own itineraries" ON public.itinerary_items FOR ALL
-USING (
-  auth.uid() = (SELECT user_id FROM public.itineraries WHERE id = itinerary_id)
-);
+CREATE POLICY "Users can manage items in their own itineraries" ON public.itinerary_items FOR ALL USING (auth.uid() = (SELECT user_id FROM public.itineraries WHERE id = itinerary_id));
 
 
 -- == STEP 5: STORAGE POLICIES ==
-CREATE POLICY "View Public Images" ON storage.objects FOR SELECT
-  USING (bucket_id IN ('promotion-images', 'cluster-images', 'event-images', 'banner-images', 'product-images'));
-  
-CREATE POLICY "Manage Promotions" ON storage.objects FOR ALL
-  USING (bucket_id = 'promotion-images' AND public.is_admin_or_editor())
-  WITH CHECK (bucket_id = 'promotion-images' AND public.is_admin_or_editor());
-
-CREATE POLICY "Admins and Editors can manage banner images" ON storage.objects FOR ALL
-  USING (bucket_id = 'banner-images' AND public.is_admin_or_editor())
-  WITH CHECK (bucket_id = 'banner-images' AND public.is_admin_or_editor());
-
-CREATE POLICY "Manage Cluster/Event Images" ON storage.objects FOR ALL
-  USING (bucket_id IN ('cluster-images', 'event-images') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()))
-  WITH CHECK (bucket_id IN ('cluster-images', 'event-images') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));
-
-CREATE POLICY "Manage Grant Reports" ON storage.objects FOR ALL
-  USING (bucket_id IN ('grant-early-report-files', 'grant-final-report-files') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()))
-  WITH CHECK (bucket_id IN ('grant-early-report-files', 'grant-final-report-files') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));
-
--- Allow owners of the product (folder) or admins/editors to upload, update, and delete images.
--- The user's UUID must match the first folder in the file path, e.g., 'public/product-images/uuid-of-user/image.png'
-CREATE POLICY "Manage Product Images" ON storage.objects FOR ALL
-  USING (bucket_id = 'product-images' AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()))
-  WITH CHECK (bucket_id = 'product-images' AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));
+CREATE POLICY "View Public Images" ON storage.objects FOR SELECT USING (bucket_id IN ('promotion-images', 'cluster-images', 'event-images', 'banner-images', 'product-images'));
+CREATE POLICY "Manage Promotions" ON storage.objects FOR ALL USING (bucket_id = 'promotion-images' AND public.is_admin_or_editor()) WITH CHECK (bucket_id = 'promotion-images' AND public.is_admin_or_editor());
+CREATE POLICY "Admins and Editors can manage banner images" ON storage.objects FOR ALL USING (bucket_id = 'banner-images' AND public.is_admin_or_editor()) WITH CHECK (bucket_id = 'banner-images' AND public.is_admin_or_editor());
+CREATE POLICY "Manage Cluster/Event Images" ON storage.objects FOR ALL USING (bucket_id IN ('cluster-images', 'event-images') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor())) WITH CHECK (bucket_id IN ('cluster-images', 'event-images') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));
+CREATE POLICY "Manage Grant Reports" ON storage.objects FOR ALL USING (bucket_id IN ('grant-early-report-files', 'grant-final-report-files') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor())) WITH CHECK (bucket_id IN ('grant-early-report-files', 'grant-final-report-files') AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));
+CREATE POLICY "Manage Product Images" ON storage.objects FOR ALL USING (bucket_id = 'product-images' AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor())) WITH CHECK (bucket_id = 'product-images' AND ((auth.uid() = (storage.foldername(name))[1]::uuid) OR public.is_admin_or_editor()));

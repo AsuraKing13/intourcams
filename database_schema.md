@@ -165,3 +165,13 @@ This document outlines the schema for the INTOURCAMS application database, based
 | :--- | :--- |
 | `date` | `date` |
 | `name` | `text` |
+
+### `public.roi_analytics`
+
+| Column | Data Type |
+| :--- | :--- |
+| `id` | `bigint` (PK) |
+| `created_at` | `timestamptz` |
+| `year` | `integer` |
+| `revenue` | `numeric` |
+| `income` | `numeric` |

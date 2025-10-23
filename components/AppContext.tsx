@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback, ReactNode, useContext, useMemo, useRef } from 'react';
 import { type PostgrestError, type User as SupabaseUser, AuthError, type Session, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
-import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem, NestedNavItemType, WebsiteTrafficSummary } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, UserRole, StatusHistoryEntry, GrantCategory, PrimaryCreativeCategoryDef, ReportFile, ClusterReview, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserTier, ClusterAnalytic, Itinerary, ItineraryItem, NestedNavItemType, WebsiteTrafficSummary, RoiAnalyticsData } from '../types.ts';
 import { useToast, type ToastType } from './ToastContext.tsx';
 import { MOCK_GRANT_CATEGORIES, MOCK_CREATIVE_CATEGORIES, NAV_ITEMS, HEADER_NAV_ITEMS } from '../constants.tsx';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
@@ -15,6 +15,8 @@ const MAINTENANCE_MESSAGE_KEY = 'maintenance_mode_message';
 
 // --- Helper Types ---
 interface EditUserData { name: string; role: UserRole; tier: UserTier; }
+type RoiDataInsert = { year: number; revenue: number; income: number };
+
 
 // --- Context Value Interface ---
 interface AppContextValue {
@@ -23,11 +25,13 @@ interface AppContextValue {
     grantCategories: GrantCategory[]; creativeCategories: PrimaryCreativeCategoryDef[]; holidays: PublicHoliday[]; promotions: PromotionItem[];
     visitorAnalyticsData: VisitorAnalyticsData[]; clusterAnalytics: ClusterAnalytic[]; bannerImageUrl: string | null; bannerOverlayOpacity: number; isMaintenanceMode: boolean; maintenanceMessage: string;
     myItinerary: ItineraryItem[]; HEADER_NAV_ITEMS: NestedNavItemType[]; websiteTrafficSummary: WebsiteTrafficSummary | null; publicTotalVisits: number | null;
+    roiAnalyticsData: RoiAnalyticsData[];
     // Loading State
     isLoadingClusters: boolean; isLoadingEvents: boolean; isLoadingGrantApplications: boolean; isLoadingNotifications: boolean;
     isLoadingUsers: boolean; isLoadingGrantCategories: boolean; isLoadingCreativeCategories: boolean; isLoadingHolidays: boolean;
     isLoadingPromotions: boolean; isLoadingVisitorAnalytics: boolean; isLoadingClusterAnalytics: boolean; isLoadingBannerImage: boolean; isLoadingMaintenanceMode: boolean;
     isLoadingItinerary: boolean; isLoadingWebsiteTraffic: boolean; isLoadingPublicTotalVisits: boolean;
+    isLoadingRoiAnalytics: boolean;
     // Auth State
     currentUser: User | null; isAuthenticated: boolean; isInitializing: boolean; isLoggingOut: boolean; isPremiumUser: boolean;
     // UI State
@@ -104,6 +108,7 @@ interface AppContextValue {
     // Analytics Actions
     getDailyClusterAnalytics: (clusterId: string, periodDays: number) => Promise<{ date: string, views: number, clicks: number }[]>;
     uploadVisitorAnalyticsBatch: (data: VisitorAnalyticsData[]) => Promise<void>;
+    uploadRoiAnalyticsBatch: (data: RoiDataInsert[]) => Promise<void>;
     logPageView: (pagePath: string, sessionId: string) => Promise<void>;
     feedback: Feedback[];
     isLoadingFeedback: boolean;
@@ -142,6 +147,7 @@ const initialDataState = {
     clusterAnalytics: [] as ClusterAnalytic[],
     feedback: [] as Feedback[],
     myItinerary: [] as ItineraryItem[],
+    roiAnalyticsData: [] as RoiAnalyticsData[],
     bannerImageUrl: null as string | null,
     bannerOverlayOpacity: 0.5,
     isMaintenanceMode: false,
@@ -162,6 +168,7 @@ const initialDataState = {
     isLoadingClusterAnalytics: true,
     isLoadingFeedback: true,
     isLoadingItinerary: true,
+    isLoadingRoiAnalytics: true,
     isLoadingBannerImage: true,
     isLoadingMaintenanceMode: true,
 };
@@ -330,6 +337,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         finally { setState(prev => ({ ...prev, isLoadingItinerary: false })); }
     }, [handleError]);
 
+    const fetchRoiAnalytics = useCallback(async () => {
+        setState(prev => ({ ...prev, isLoadingRoiAnalytics: true }));
+        try {
+            const data = await api.fetchRoiAnalytics();
+            setState(prev => ({ ...prev, roiAnalyticsData: data }));
+        } catch (e) { handleError(e, 'Fetching ROI analytics'); } 
+        finally { setState(prev => ({ ...prev, isLoadingRoiAnalytics: false })); }
+    }, [handleError]);
+
     const uploadVisitorAnalyticsBatch = useCallback(async (data: VisitorAnalyticsData[]) => {
         try {
             await api.uploadVisitorAnalyticsBatch(data);
@@ -340,6 +356,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             throw error;
         }
     }, [handleError, showToast, fetchVisitorAnalytics]);
+
+    const uploadRoiAnalyticsBatch = useCallback(async (data: RoiDataInsert[]) => {
+        try {
+            await api.uploadRoiAnalyticsBatch(data);
+            showToast(`${data.length} records uploaded successfully!`, 'success');
+            fetchRoiAnalytics(); // Refresh data in the background
+        } catch(error) {
+            handleError(error, "Uploading ROI analytics");
+            throw error;
+        }
+    }, [handleError, showToast, fetchRoiAnalytics]);
 
     const fetchConfig = useCallback(async () => {
         setState(prev => ({ ...prev, isLoadingBannerImage: true, isLoadingMaintenanceMode: true }));
@@ -361,7 +388,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const dataPromises = [
             fetchClusters(), fetchEvents(), fetchGrantApplications(), fetchNotifications(),
             fetchUsers(), fetchHolidays(), refreshDashboardPromotions(), fetchVisitorAnalytics(), 
-            fetchFeedback(), fetchClusterAnalytics(), fetchMyItinerary(user?.id || null), fetchPublicTotalVisits()
+            fetchFeedback(), fetchClusterAnalytics(), fetchMyItinerary(user?.id || null), fetchPublicTotalVisits(),
+            fetchRoiAnalytics()
         ];
         if (isAdminOrEditor) {
             dataPromises.push(fetchWebsiteTrafficSummary());
@@ -370,7 +398,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setState(prev => ({...prev, websiteTrafficSummary: null, isLoadingWebsiteTraffic: false}));
         }
         await Promise.allSettled(dataPromises);
-    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits]);
+    }, [fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, fetchHolidays, refreshDashboardPromotions, fetchVisitorAnalytics, fetchFeedback, fetchClusterAnalytics, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits, fetchRoiAnalytics]);
     
     useEffect(() => {
         const initializeApp = async () => {
@@ -445,11 +473,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 case 'cluster_analytics': fetchClusterAnalytics(); break;
                 case 'feedback': fetchFeedback(); break;
                 case 'itinerary_items': fetchMyItinerary(auth.currentUser?.id || null); break;
+                case 'roi_analytics': fetchRoiAnalytics(); break;
             }
         };
         const channel = supabase.channel('db-changes').on('postgres_changes', { event: '*', schema: 'public' }, handleDbChange).subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [auth.currentUser, fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits]);
+    }, [auth.currentUser, fetchClusters, fetchEvents, fetchGrantApplications, fetchNotifications, fetchUsers, refreshDashboardPromotions, fetchConfig, fetchVisitorAnalytics, fetchClusterAnalytics, fetchFeedback, fetchMyItinerary, fetchWebsiteTrafficSummary, fetchPublicTotalVisits, fetchRoiAnalytics]);
 
     const loginUserWithPassword = useCallback(async (email: string, pass: string) => {
         const { error } = await api.loginUserWithPassword(email, pass);
@@ -1049,7 +1078,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, uploadRoiAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear
     }), [
         state, auth, isPhoneView, isPremiumUser,
         loginUserWithPassword, registerUserWithEmailPassword, logoutUser, addGrantApplication, reapplyForGrant, rejectPendingApplication,
@@ -1060,7 +1089,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllNotifications, deleteGlobalNotification, editUser, deleteUser, updateCurrentUserName, updateCurrentUserPassword, deleteCurrentUserAccount,
         addFeedback, updateFeedbackStatus, fetchAllPromotions, addPromotion, updatePromotion, deletePromotion, uploadPromotionImage, refreshDashboardPromotions,
         uploadBannerImage, updateBannerImageUrl, deleteBannerImage, updateBannerOverlayOpacity, setMaintenanceStatus,
-        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear,
+        setSiteBanner, sendGlobalPanelNotification, getDailyClusterAnalytics, uploadVisitorAnalyticsBatch, uploadRoiAnalyticsBatch, logPageView, addItineraryItem, removeItineraryItem, clearMyItinerary, getCachedAiInsight, setCachedAiInsight, getLatestEventTimestampForYear,
         togglePhoneView
     ]);
 

@@ -70,8 +70,9 @@ export const generateEventAnalyticsInsight = async (events: AppEvent[], year: nu
             3.  Examine the provided event titles to identify recurring themes or major categories of events held.
             4.  Use web search to gather supporting details (e.g., significance, scale, public reception) for the *specific* events or themes you identified from the data. Use this external information to add context to why certain periods were busy or to elaborate on the nature of the key events.
             5.  Conclude with a neutral, data-driven summary of the event landscape for the year.
+            6. In a final, separate paragraph, provide a predictive outlook for the next year. Based on the identified trends (peak seasons, recurring major events), suggest potential growth areas or periods that might see increased activity. Frame this as a strategic forecast.
 
-            The final output must be in a formal report style, written in the third person, and presented in 2-3 concise paragraphs. Avoid speculative or marketing language.
+            The final output must be in a formal report style, written in the third person, and presented in 3-4 concise paragraphs. Avoid speculative or marketing language in the main analysis, but the final predictive paragraph should be clearly framed as a forecast.
         `;
 
         const response = await ai.models.generateContent({

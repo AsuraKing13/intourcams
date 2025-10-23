@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewName, ItineraryItem, Cluster } from '../../types.ts';
 import { useAppContext } from '../AppContext.tsx';

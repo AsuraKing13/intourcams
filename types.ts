@@ -122,6 +122,9 @@ export interface Itinerary extends ItineraryDbRow {}
 type ItineraryItemDbRow = Database["public"]["Tables"]["itinerary_items"]["Row"];
 export interface ItineraryItem extends ItineraryItemDbRow {}
 
+type RoiAnalyticsDbRow = Database["public"]["Tables"]["roi_analytics"]["Row"];
+export interface RoiAnalyticsData extends RoiAnalyticsDbRow {}
+
 
 // =================================================================
 // --- UI-SPECIFIC & OTHER HELPER TYPES ---

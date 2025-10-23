@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database, Tables, TablesInsert, TablesUpdate, Json } from '../database.types.ts';
-import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic, ItineraryItem, WebsiteTrafficSummary } from '../types.ts';
+import { AppEvent, Cluster, GrantApplication, Notification, User, PublicHoliday, PromotionItem, AddGrantApplicationData, AddClusterData, AddEventData, AddPromotionData, ClusterProduct, AddClusterProductData, VisitorAnalyticsData, Feedback, FeedbackStatus, UserRole, UserTier, ClusterReview, ClusterAnalytic, ItineraryItem, WebsiteTrafficSummary, RoiAnalyticsData } from '../types.ts';
 import { parseGrantApplication } from '../utils/parsers.ts';
 import type { PostgrestError } from '@supabase/supabase-js';
 
@@ -77,6 +77,11 @@ export const api = {
         if (error) throw error;
         return (data as VisitorAnalyticsData[]) || [];
     },
+    async fetchRoiAnalytics(): Promise<RoiAnalyticsData[]> {
+        const { data, error } = await supabaseClient.from('roi_analytics').select('*').order('year', { ascending: true });
+        if (error) throw error;
+        return (data as RoiAnalyticsData[]) || [];
+    },
     async fetchClusterAnalytics(): Promise<ClusterAnalytic[]> {
         const { data, error } = await supabaseClient.from('cluster_analytics').select('*');
         if (error) throw error;
@@ -145,24 +150,26 @@ export const api = {
     // --- Grant Applications ---
     async addGrantApplication(newApplication: TablesInsert<'grant_applications'>) { const { error } = await (supabaseClient.from('grant_applications') as any).insert(newApplication); if (error) throw error; },
     async createAdminNotification(payload: TablesInsert<'notifications'>) { const { error } = await (supabaseClient.from('notifications') as any).insert(payload); if (error) throw error; },
-    async rejectPendingApplication(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_application', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
-    async makeConditionalOffer(appId: string, notes: string, amount: number) { const { error } = await supabaseClient.rpc('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }); if (error) throw error; },
-    async acceptConditionalOffer(appId: string) { const { error } = await supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }); if (error) throw error; },
-    async declineConditionalOffer(appId: string) { const { error } = await supabaseClient.rpc('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }); if (error) throw error; },
-    async submitReport(appId: string, reportFile: any, reportType: 'early' | 'final') { const { error } = await supabaseClient.rpc('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }); if (error) throw error; },
-    async approveEarlyReportAndDisburse(appId: string, amount: number, notes: string) { const { error } = await supabaseClient.rpc('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
-    async rejectEarlyReportSubmission(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_early_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
-    async rejectFinalReportSubmission(appId: string, notes: string) { const { error } = await supabaseClient.rpc('admin_reject_final_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
-    async completeGrantApplication(appId: string, amount: number, notes: string) { const { error } = await supabaseClient.rpc('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    async rejectPendingApplication(appId: string, notes: string) { const { error } = await (supabaseClient.rpc as any)('admin_reject_application', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async makeConditionalOffer(appId: string, notes: string, amount: number) { const { error } = await (supabaseClient.rpc as any)('admin_make_conditional_offer', { p_application_id: appId, p_notes: notes, p_amount_approved: amount }); if (error) throw error; },
+    async acceptConditionalOffer(appId: string) { const { error } = await (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: true }); if (error) throw error; },
+    async declineConditionalOffer(appId: string) { const { error } = await (supabaseClient.rpc as any)('handle_grant_offer_response', { p_application_id: appId, p_accepted: false }); if (error) throw error; },
+    async submitReport(appId: string, reportFile: any, reportType: 'early' | 'final') { const { error } = await (supabaseClient.rpc as any)('submit_report', { p_application_id: appId, p_report_file: reportFile as unknown as Json, p_report_type: reportType }); if (error) throw error; },
+    async approveEarlyReportAndDisburse(appId: string, amount: number, notes: string) { const { error } = await (supabaseClient.rpc as any)('admin_approve_early_report', { p_application_id: appId, p_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
+    async rejectEarlyReportSubmission(appId: string, notes: string) { const { error } = await (supabaseClient.rpc as any)('admin_reject_early_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async rejectFinalReportSubmission(appId: string, notes: string) { const { error } = await (supabaseClient.rpc as any)('admin_reject_final_report', { p_application_id: appId, p_notes: notes }); if (error) throw error; },
+    async completeGrantApplication(appId: string, amount: number, notes: string) { const { error } = await (supabaseClient.rpc as any)('admin_complete_application', { p_application_id: appId, p_final_disbursement_amount: amount, p_notes: notes }); if (error) throw error; },
 
     // --- Clusters ---
     async addCluster(newCluster: TablesInsert<'clusters'>) { const { error } = await (supabaseClient.from('clusters') as any).insert(newCluster); if (error) throw error; },
     async addClustersBatch(payload: TablesInsert<'clusters'>[]) { const { error } = await (supabaseClient.from('clusters') as any).insert(payload); if (error) throw error; },
     async updateCluster(id: string, data: TablesUpdate<'clusters'>) { const { error } = await (supabaseClient.from('clusters') as any).update(data).eq('id', id); if (error) throw error; },
     async deleteCluster(id: string) { const { error } = await supabaseClient.from('clusters').delete().eq('id', id); if (error) throw error; },
-    incrementClusterView: (clusterId: string) => supabaseClient.rpc('increment_cluster_view', { cluster_id_to_increment: clusterId }),
-    incrementClusterClick: (clusterId: string) => supabaseClient.rpc('increment_cluster_click', { cluster_id_to_increment: clusterId }),
-    async transferClusterOwnership(clusterId: string, newOwnerId: string) { const { error } = await supabaseClient.rpc('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }); if (error) throw error; },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    incrementClusterView: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_view', { cluster_id_to_increment: clusterId }),
+    incrementClusterClick: (clusterId: string) => (supabaseClient.rpc as any)('increment_cluster_click', { cluster_id_to_increment: clusterId }),
+    async transferClusterOwnership(clusterId: string, newOwnerId: string) { const { error } = await (supabaseClient.rpc as any)('transfer_cluster_ownership', { p_cluster_id: clusterId, p_new_owner_id: newOwnerId }); if (error) throw error; },
 
     // --- Cluster Reviews & Products ---
     async fetchReviewsForCluster(clusterId: string): Promise<ClusterReview[]> {
@@ -192,7 +199,8 @@ export const api = {
 
     // --- Notifications ---
     async markNotificationAsRead(id: string, payload: TablesUpdate<'notifications'>) { const { error } = await (supabaseClient.from('notifications') as any).update(payload).eq('id', id); if (error) throw error; },
-    async clearAllNotifications(notificationIds: string[]) { const { error } = await supabaseClient.rpc('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }); if (error) throw error; },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    async clearAllNotifications(notificationIds: string[]) { const { error } = await (supabaseClient.rpc as any)('mark_notifications_cleared_by_user', { p_notification_ids: notificationIds }); if (error) throw error; },
     async deleteGlobalNotification(id: string) { const { error } = await supabaseClient.from('notifications').delete().eq('id', id); if (error) throw error; },
 
     // --- User Management ---
@@ -200,7 +208,8 @@ export const api = {
     
     // --- Feedback ---
     async addFeedback(payload: TablesInsert<'feedback'>) { const { error } = await (supabaseClient.from('feedback') as any).insert(payload); if (error) throw error; },
-    async updateFeedbackStatus(id: string, status: FeedbackStatus) { const { error } = await supabaseClient.rpc('update_feedback_status', { p_id: id, p_status: status }); if (error) throw error; },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    async updateFeedbackStatus(id: string, status: FeedbackStatus) { const { error } = await (supabaseClient.rpc as any)('update_feedback_status', { p_id: id, p_status: status }); if (error) throw error; },
     
     // --- Promotions ---
     async addPromotion(payload: TablesInsert<'promotions'>) { const { error } = await (supabaseClient.from('promotions') as any).insert(payload); if (error) throw error; },
@@ -225,11 +234,14 @@ export const api = {
         const { error: insertError } = await (supabaseClient.from('notifications') as any).insert(newBanner);
         if (insertError) throw insertError;
     },
-    async sendGlobalPanelNotification(message: string) { const { error } = await supabaseClient.rpc('send_notification_to_all_users', { p_message: message }); if (error) throw error; },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    async sendGlobalPanelNotification(message: string) { const { error } = await (supabaseClient.rpc as any)('send_notification_to_all_users', { p_message: message }); if (error) throw error; },
 
     // --- Analytics ---
-    async uploadVisitorAnalyticsBatch(data: VisitorAnalyticsData[]) { const { error } = await supabaseClient.rpc('upload_visitor_analytics_batch', { p_data: data as unknown as Json }); if (error) throw error; },
-    async logPageView(pagePath: string, sessionId: string) { const { error } = await supabaseClient.rpc('log_page_view', { p_page_path: pagePath, p_session_id: sessionId }); if (error) console.error("Failed to log page view:", error); },
+    // FIX: Cast RPC calls to `any` to resolve 'is not assignable to type never' errors.
+    async uploadVisitorAnalyticsBatch(data: VisitorAnalyticsData[]) { const { error } = await (supabaseClient.rpc as any)('upload_visitor_analytics_batch', { p_data: data as unknown as Json }); if (error) throw error; },
+    async uploadRoiAnalyticsBatch(data: { year: number; revenue: number; income: number }[]) { const { error } = await (supabaseClient.rpc as any)('upload_roi_analytics_batch', { p_data: data as unknown as Json }); if (error) throw error; },
+    async logPageView(pagePath: string, sessionId: string) { const { error } = await (supabaseClient.rpc as any)('log_page_view', { p_page_path: pagePath, p_session_id: sessionId }); if (error) console.error("Failed to log page view:", error); },
     async getWebsiteTrafficSummary(periodDays: number): Promise<WebsiteTrafficSummary> {
         const { data, error } = await (supabaseClient.rpc as any)('get_website_traffic_summary', { p_period_days: periodDays });
         if (error) throw error;

@@ -107,9 +107,7 @@ const TourismMappingView: React.FC<TourismMappingViewProps> = ({ setCurrentView 
         });
 
         resizeObserver.observe(filterElement);
-        // FIX: The error "Expected 1 arguments, but got 0" pointed to a type definition issue with `resizeObserver.disconnect()`.
-        // Using `unobserve(filterElement)` is the correct way to clean up a single element observer and resolves the error.
-        // FIX: Replaced `disconnect()` with `unobserve(filterElement)` to correctly unobserve the specific element on cleanup, resolving the argument count error.
+        // FIX: The `disconnect` method was causing an argument count error. Replaced with `unobserve` to correctly clean up the ResizeObserver by unobserving the specific element.
         return () => resizeObserver.unobserve(filterElement);
     }, []);
 

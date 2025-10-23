@@ -147,7 +147,8 @@ const GrantAnalyticsView: React.FC = () => {
                  <div style={{ width: '100%', height: 350 }}>
                     <ResponsiveContainer>
                         <PieChart>
-                            <Pie data={statusDistributionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} labelLine={false} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                            {/* FIX: The `percent` prop from recharts can be undefined. Added a fallback to 0 to prevent a TypeScript error during arithmetic operations. */}
+                            <Pie data={statusDistributionData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={120} labelLine={false} label={({ name, percent }) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}>
                                 {/* FIX: Replaced incorrect mapping logic. Now mapping over statusDistributionData to generate cells and assigning colors cyclically. */}
                                 {statusDistributionData.map((entry, index) => {
                                     const colors = theme === 'dark' ? chartColors.darkPie : chartColors.pie;

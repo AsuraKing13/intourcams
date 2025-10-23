@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ViewName } from '../../types.ts';
 import Header from '../Header.tsx';

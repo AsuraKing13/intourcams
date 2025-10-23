@@ -514,6 +514,29 @@ export interface Database {
           name?: string
         }
       }
+      roi_analytics: {
+        Row: {
+          id: number
+          created_at: string
+          year: number
+          revenue: number
+          income: number
+        }
+        Insert: {
+          id?: number
+          created_at?: string
+          year: number
+          revenue: number
+          income: number
+        }
+        Update: {
+          id?: number
+          created_at?: string
+          year?: number
+          revenue?: number
+          income?: number
+        }
+      }
       users: {
         Row: {
           avatar: string | null

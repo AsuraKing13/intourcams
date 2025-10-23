@@ -86,53 +86,57 @@ const EventAnalyticsView: React.FC = () => {
     const loadSummary = useCallback(async (forceRefresh = false) => {
         setIsGeneratingSummary(true);
         setAiInsight(null);
-
-        if (forceRefresh && !canManage) {
-             forceRefresh = false; 
-        }
-
-        const cacheKey = String(selectedYear);
-        const cachedResult = await getCachedAiInsight('event_analytics', cacheKey);
-        const latestEventTimestamp = await getLatestEventTimestampForYear(selectedYear);
-        
-        let isCacheFresh = false;
-        if (cachedResult && latestEventTimestamp) {
-            isCacheFresh = new Date(cachedResult.data_last_updated_at) >= new Date(latestEventTimestamp);
-        } else if (cachedResult && !latestEventTimestamp) {
-            isCacheFresh = true; // No new events, so cache is fresh
-        }
-
-        if (cachedResult && !forceRefresh && isCacheFresh) {
-            try {
-                const parsed = JSON.parse(cachedResult.content);
-                setAiInsight(parsed);
-            } catch (e) {
-                setAiInsight({ summary: cachedResult.content, sources: [] });
+        try {
+            if (forceRefresh && !canManage) {
+                forceRefresh = false; 
             }
-            setIsGeneratingSummary(false);
-            return;
-        }
-        
-        if (canManage) {
-            const newInsight = await generateSummary();
-            setAiInsight(newInsight);
-            const newTimestamp = await getLatestEventTimestampForYear(selectedYear);
-            await setCachedAiInsight('event_analytics', cacheKey, JSON.stringify(newInsight), newTimestamp || new Date().toISOString());
-        } else {
-            if (cachedResult) {
+
+            const cacheKey = String(selectedYear);
+            const cachedResult = await getCachedAiInsight('event_analytics', cacheKey);
+            const latestEventTimestamp = await getLatestEventTimestampForYear(selectedYear);
+            
+            let isCacheFresh = false;
+            if (cachedResult && latestEventTimestamp) {
+                isCacheFresh = new Date(cachedResult.data_last_updated_at) >= new Date(latestEventTimestamp);
+            } else if (cachedResult && !latestEventTimestamp) {
+                isCacheFresh = true; // No new events, so cache is fresh
+            }
+
+            if (cachedResult && !forceRefresh && isCacheFresh) {
                 try {
                     const parsed = JSON.parse(cachedResult.content);
                     setAiInsight(parsed);
                 } catch (e) {
                     setAiInsight({ summary: cachedResult.content, sources: [] });
                 }
-            } else if (filteredEvents.length > 0) {
-                 setAiInsight({ summary: "The AI analysis for this period has not been generated yet. An editor or admin can generate it by visiting this page.", sources: [] });
-            } else {
-                 setAiInsight({ summary: "No event data for this year to analyze.", sources: [] });
+                return;
             }
+            
+            if (canManage) {
+                const newInsight = await generateSummary();
+                setAiInsight(newInsight);
+                const newTimestamp = await getLatestEventTimestampForYear(selectedYear);
+                await setCachedAiInsight('event_analytics', cacheKey, JSON.stringify(newInsight), newTimestamp || new Date().toISOString());
+            } else {
+                if (cachedResult) {
+                    try {
+                        const parsed = JSON.parse(cachedResult.content);
+                        setAiInsight(parsed);
+                    } catch (e) {
+                        setAiInsight({ summary: cachedResult.content, sources: [] });
+                    }
+                } else if (filteredEvents.length > 0) {
+                    setAiInsight({ summary: "The AI analysis for this period has not been generated yet. An editor or admin can generate it by visiting this page.", sources: [] });
+                } else {
+                    setAiInsight({ summary: "No event data for this year to analyze.", sources: [] });
+                }
+            }
+        } catch (error) {
+            console.error("Error loading summary:", error);
+            setAiInsight({ summary: "An error occurred while loading the analysis. Please try again.", sources: [] });
+        } finally {
+            setIsGeneratingSummary(false);
         }
-        setIsGeneratingSummary(false);
     }, [selectedYear, canManage, filteredEvents.length, getCachedAiInsight, getLatestEventTimestampForYear, generateSummary, setCachedAiInsight]);
     
     useEffect(() => {
